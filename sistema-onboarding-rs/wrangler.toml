@@ -1,0 +1,14 @@
+name = "sistema-onboarding-rs"
+main = "build/worker/shim.mjs" # worker-build genera este archivo
+compatibility_date = "2026-02-26"
+
+[build]
+command = "/home/melaza/.cargo/bin/worker-build --release"
+
+[vars]
+JWT_SECRET = "1234567890"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "onboarding"
+database_id = "fa158cde-1b13-4f14-ba5d-27ea326b5c90"

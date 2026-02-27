@@ -1,0 +1,27 @@
+[package]
+name = "sistema-onboarding-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bugambalia <jhonier0301@gmail.com>"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# worker sin axum para evitar tokio/mio que no compilan en WASM
+worker = { version = "0.7", features = ["d1"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# Verificación de contraseñas Argon2id — pure Rust, compatible con WASM
+argon2 = "0.5"
+# Criptografía pura en Rust — compatible con wasm32-unknown-unknown
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+# wasmbind permite que chrono use js_sys::Date::now() en lugar de SystemTime
+chrono = { version = "0.4", default-features = false, features = ["clock", "wasmbind"] }
+# getrandom con js para compatibilidad WASM en Cloudflare Workers
+getrandom = { version = "0.2", features = ["js"] }
+
+[profile.release]
+opt-level = "s"
