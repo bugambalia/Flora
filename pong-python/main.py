@@ -1,0 +1,39 @@
+import pygame
+from pygame import Vector2
+
+from player import Player
+
+# pygame setup
+pygame.init()
+screen = pygame.display.set_mode((1280, 720))
+clock = pygame.time.Clock()
+running = True
+dt = 0
+
+player = Player(Vector2(100, 200), "blue", Vector2(100, 200), screen)
+# player_pos = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
+
+while running:
+    # poll for events
+    # pygame.QUIT event means the user clicked X to close your window
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    # fill the screen with a color to wipe away anything from last frame
+    screen.fill("purple")
+
+    # pygame.draw.rect(screen, "red", (player_pos.x, player_pos.y, 100, 200))
+
+    keys = pygame.key.get_pressed()
+    player.move(keys, dt)
+    player.draw()
+    # flip() the display to put your work on screen
+    pygame.display.flip()
+
+    # limits FPS to 60
+    # dt is delta time in seconds since last frame, used for framerate-
+    # independent physics.
+    dt = clock.tick(60) / 1000
+
+pygame.quit()
