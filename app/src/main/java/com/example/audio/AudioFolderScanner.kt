@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -18,6 +19,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.ArrayDeque
 
+@Immutable
 data class ScannedAudioCandidate(
   val uri: String,
   val displayName: String,
@@ -33,6 +35,7 @@ data class ScannedAudioCandidate(
   val codec: String = "AUDIO",
 )
 
+@Immutable
 data class DetectedFolderSource(
   val folderName: String,
   val folderKey: String,
@@ -42,6 +45,7 @@ data class DetectedFolderSource(
   val qualifyingCount: Int get() = qualifyingTracks.size
 }
 
+@Immutable
 data class DominantFolderScanResult(
   val winningFolder: DetectedFolderSource?,
   val allFolders: List<DetectedFolderSource>,

@@ -112,6 +112,7 @@ private enum class PlayerTabMode { MUSICA, LETRAS }
 fun NowPlayingScreen(
   uiState: HerbariumUiState,
   audioSpectrumFlow: StateFlow<BotanicalAudioSpectrum> = MutableStateFlow(BotanicalAudioSpectrum.Idle),
+  positionMsFlow: StateFlow<Long> = MutableStateFlow(uiState.playbackState.positionMs),
   onClose: () -> Unit,
   onTogglePlayPause: () -> Unit,
   onSeekTo: (Long) -> Unit,
@@ -182,23 +183,11 @@ fun NowPlayingScreen(
   var showThemeGallery by remember { mutableStateOf(false) }
   var showLiveBotanicalDisc by remember { mutableStateOf(false) }
   var showTrackMenu by remember { mutableStateOf(false) }
-  var isDraggingSlider by remember { mutableStateOf(false) }
-  var sliderDragPosition by remember { mutableFloatStateOf(0f) }
 
   val durationMs = playback.durationMs.coerceAtLeast(1L)
-  val currentPositionMs = if (isDraggingSlider) {
-    sliderDragPosition.toLong()
-  } else {
-    playback.positionMs.coerceIn(0L, durationMs)
-  }
-  val progressFraction = (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
 
   val verses = remember(track?.id, track?.speciesId) {
     BotanicalLyricsCatalog.getLyricsForTrack(track)
-  }
-  val activeVerseIndex = remember(progressFraction, verses.size) {
-    if (verses.isEmpty()) 0
-    else (progressFraction * verses.size).toInt().coerceIn(0, verses.lastIndex)
   }
 
   Box(
@@ -480,89 +469,22 @@ fun NowPlayingScreen(
             }
           }
         } else {
-          Column(
-            modifier = Modifier
-              .fillMaxSize()
-              .verticalScroll(rememberScrollState())
-              .padding(top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-          ) {
-            verses.forEachIndexed { idx, line ->
-              val isActive = idx == activeVerseIndex
-              Row(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .clip(FloraChipShape)
-                  .clickable {
-                    val seekTarget = (durationMs * idx / verses.size.coerceAtLeast(1))
-                    onSeekTo(seekTarget)
-                  }
-                  .padding(vertical = 4.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.Top
-              ) {
-                Box(
-                  modifier = Modifier
-                    .padding(top = 11.dp, end = 10.dp)
-                    .size(width = 4.dp, height = if (isActive) 18.dp else 6.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(if (isActive) FloraGoldSoft else Color.Transparent)
-                )
-                Text(
-                  text = line,
-                  style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 20.sp,
-                    lineHeight = 29.sp,
-                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
-                  ),
-                  color = if (isActive) FloraPlayerCream else FloraLyricIdle.copy(alpha = 0.84f)
-                )
-              }
-            }
-          }
+          NowPlayingLyricsList(
+            verses = verses,
+            positionMsFlow = positionMsFlow,
+            durationMs = durationMs,
+            onSeekTo = onSeekTo,
+          )
         }
       }
 
       Spacer(modifier = Modifier.height(8.dp))
 
-      Slider(
-        value = currentPositionMs.toFloat(),
-        onValueChange = {
-          isDraggingSlider = true
-          sliderDragPosition = it
-        },
-        onValueChangeFinished = {
-          onSeekTo(sliderDragPosition.toLong())
-          isDraggingSlider = false
-        },
-        valueRange = 0f..durationMs.toFloat(),
-        colors = SliderDefaults.colors(
-          thumbColor = FloraPlayerCream,
-          activeTrackColor = FloraGoldSoft,
-          inactiveTrackColor = Color.White.copy(alpha = 0.22f)
-        ),
-        modifier = Modifier
-          .fillMaxWidth()
-          .semantics {
-            contentDescription = "${formatDuration(currentPositionMs)} de ${formatDuration(durationMs)}"
-          }
-          .testTag("now_playing_seekbar")
+      NowPlayingSeekBarSection(
+        positionMsFlow = positionMsFlow,
+        durationMs = durationMs,
+        onSeekTo = onSeekTo,
       )
-
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-      ) {
-        Text(
-          text = formatDuration(currentPositionMs),
-          style = MaterialTheme.typography.bodySmall,
-          color = FloraDarkMeta
-        )
-        Text(
-          text = formatDuration(durationMs),
-          style = MaterialTheme.typography.bodySmall,
-          color = FloraDarkMeta
-        )
-      }
 
       Spacer(modifier = Modifier.height(10.dp))
 
@@ -646,6 +568,117 @@ fun NowPlayingScreen(
             tint = if (playback.repeatMode != RepeatModeOption.OFF) FloraGoldSoft else FloraDarkMeta
           )
         }
+      }
+    }
+  }
+}
+
+@Composable
+private fun NowPlayingSeekBarSection(
+  positionMsFlow: StateFlow<Long>,
+  durationMs: Long,
+  onSeekTo: (Long) -> Unit,
+) {
+  val livePositionMs by positionMsFlow.collectAsStateWithLifecycle()
+  var isDraggingSlider by remember { mutableStateOf(false) }
+  var sliderDragPosition by remember { mutableFloatStateOf(0f) }
+
+  val currentPositionMs = if (isDraggingSlider) {
+    sliderDragPosition.toLong()
+  } else {
+    livePositionMs.coerceIn(0L, durationMs)
+  }
+
+  Column(modifier = Modifier.fillMaxWidth()) {
+    Slider(
+      value = currentPositionMs.toFloat(),
+      onValueChange = {
+        isDraggingSlider = true
+        sliderDragPosition = it
+      },
+      onValueChangeFinished = {
+        onSeekTo(sliderDragPosition.toLong())
+        isDraggingSlider = false
+      },
+      valueRange = 0f..durationMs.toFloat(),
+      colors = SliderDefaults.colors(
+        thumbColor = FloraPlayerCream,
+        activeTrackColor = FloraGoldSoft,
+        inactiveTrackColor = Color.White.copy(alpha = 0.22f)
+      ),
+      modifier = Modifier
+        .fillMaxWidth()
+        .semantics {
+          contentDescription = "${formatDuration(currentPositionMs)} de ${formatDuration(durationMs)}"
+        }
+        .testTag("now_playing_seekbar")
+    )
+
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+      Text(
+        text = formatDuration(currentPositionMs),
+        style = MaterialTheme.typography.bodySmall,
+        color = FloraDarkMeta
+      )
+      Text(
+        text = formatDuration(durationMs),
+        style = MaterialTheme.typography.bodySmall,
+        color = FloraDarkMeta
+      )
+    }
+  }
+}
+
+@Composable
+private fun NowPlayingLyricsList(
+  verses: List<String>,
+  positionMsFlow: StateFlow<Long>,
+  durationMs: Long,
+  onSeekTo: (Long) -> Unit,
+) {
+  val livePositionMs by positionMsFlow.collectAsStateWithLifecycle()
+  val progressFraction = (livePositionMs.coerceIn(0L, durationMs).toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+  val activeVerseIndex = if (verses.isEmpty()) 0 else (progressFraction * verses.size).toInt().coerceIn(0, verses.lastIndex)
+
+  Column(
+    modifier = Modifier
+      .fillMaxSize()
+      .verticalScroll(rememberScrollState())
+      .padding(top = 12.dp, bottom = 12.dp),
+    verticalArrangement = Arrangement.spacedBy(18.dp)
+  ) {
+    verses.forEachIndexed { idx, line ->
+      val isActive = idx == activeVerseIndex
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .clip(FloraChipShape)
+          .clickable {
+            val seekTarget = (durationMs * idx / verses.size.coerceAtLeast(1))
+            onSeekTo(seekTarget)
+          }
+          .padding(vertical = 4.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.Top
+      ) {
+        Box(
+          modifier = Modifier
+            .padding(top = 11.dp, end = 10.dp)
+            .size(width = 4.dp, height = if (isActive) 18.dp else 6.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(if (isActive) FloraGoldSoft else Color.Transparent)
+        )
+        Text(
+          text = line,
+          style = MaterialTheme.typography.titleLarge.copy(
+            fontSize = 20.sp,
+            lineHeight = 29.sp,
+            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+          ),
+          color = if (isActive) FloraPlayerCream else FloraLyricIdle.copy(alpha = 0.84f)
+        )
       }
     }
   }

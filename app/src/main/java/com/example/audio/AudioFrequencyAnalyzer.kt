@@ -1,6 +1,7 @@
 package com.example.audio
 
 import androidx.annotation.OptIn
+import androidx.compose.runtime.Immutable
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.audio.TeeAudioProcessor
@@ -16,6 +17,7 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sin
 
+@Immutable
 data class BotanicalAudioSpectrum(
   val bands: List<Float> = List(BAND_COUNT) { 0f },
   val bass: Float = 0f,
@@ -63,6 +65,19 @@ class AudioFrequencyAnalyzer {
   @Volatile
   private var lastEmitTimeMs: Long = 0L
 
+  @Volatile
+  private var visualizationEnabled: Boolean = false
+
+  fun setVisualizationEnabled(enabled: Boolean) {
+    if (visualizationEnabled == enabled) return
+    visualizationEnabled = enabled
+    if (!enabled) {
+      onPlaybackPaused()
+    }
+  }
+
+  fun isVisualizationEnabled(): Boolean = visualizationEnabled
+
   @OptIn(UnstableApi::class)
   val audioBufferSink: TeeAudioProcessor.AudioBufferSink =
     object : TeeAudioProcessor.AudioBufferSink {
@@ -75,7 +90,7 @@ class AudioFrequencyAnalyzer {
       }
 
       override fun handleBuffer(buffer: ByteBuffer) {
-        if (encoding != C.ENCODING_PCM_16BIT) return
+        if (!visualizationEnabled || encoding != C.ENCODING_PCM_16BIT) return
         val now = System.currentTimeMillis()
         val copy = buffer.asReadOnlyBuffer().order(ByteOrder.LITTLE_ENDIAN)
         val channels = channelCount.coerceAtLeast(1)

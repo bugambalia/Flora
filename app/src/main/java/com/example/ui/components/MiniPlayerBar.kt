@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.PlaybackState
 import com.example.ui.theme.FloraDarkMeta
 import com.example.ui.theme.FloraForestDeep
@@ -49,6 +50,8 @@ import com.example.ui.theme.FloraTerracotta
 import com.example.ui.theme.FloraThumbShape
 import com.example.ui.theme.LocalAlbumPalette
 import com.example.ui.theme.LocalThemeGradients
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 private val MiniPlayerShape = RoundedCornerShape(
   topStart = 3.dp,
@@ -66,6 +69,7 @@ fun MiniPlayerBar(
   onToggleFavorite: () -> Unit,
   onOpenNowPlaying: () -> Unit,
   modifier: Modifier = Modifier,
+  positionMsFlow: StateFlow<Long> = MutableStateFlow(playbackState.positionMs),
 ) {
   val track = playbackState.currentTrack ?: return
   val albumPalette = LocalAlbumPalette.current
@@ -75,9 +79,6 @@ fun MiniPlayerBar(
     animationSpec = tween(550),
     label = "miniPlayerAccent"
   )
-  val progress = if (playbackState.durationMs > 0L) {
-    (playbackState.positionMs.toFloat() / playbackState.durationMs.toFloat()).coerceIn(0f, 1f)
-  } else 0f
 
   Box(
     modifier = modifier
@@ -199,24 +200,42 @@ fun MiniPlayerBar(
         }
       }
 
-      // Clipped 3dp progress bar inside the asymmetric container (no corner bleed)
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .height(3.dp)
-          .background(Color.White.copy(alpha = 0.14f))
-      ) {
-        Box(
-          modifier = Modifier
-            .fillMaxWidth(progress)
-            .height(3.dp)
-            .background(
-              Brush.horizontalGradient(
-                listOf(FloraTerracotta, barAccent)
-              )
-            )
-        )
-      }
+      // Clipped 3dp progress bar inside the asymmetric container (isolated 250ms recomposition scope)
+      MiniPlayerProgressBar(
+        positionMsFlow = positionMsFlow,
+        durationMs = playbackState.durationMs,
+        barAccent = barAccent,
+      )
     }
+  }
+}
+
+@Composable
+private fun MiniPlayerProgressBar(
+  positionMsFlow: StateFlow<Long>,
+  durationMs: Long,
+  barAccent: Color,
+) {
+  val positionMs by positionMsFlow.collectAsStateWithLifecycle()
+  val progress = if (durationMs > 0L) {
+    (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+  } else 0f
+
+  Box(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(3.dp)
+      .background(Color.White.copy(alpha = 0.14f))
+  ) {
+    Box(
+      modifier = Modifier
+        .fillMaxWidth(progress)
+        .height(3.dp)
+        .background(
+          Brush.horizontalGradient(
+            listOf(FloraTerracotta, barAccent)
+          )
+        )
+    )
   }
 }

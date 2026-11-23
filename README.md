@@ -6,13 +6,13 @@
 
 ## Capturas
 
-| Floración (Inicio) | Colección y Playlists | Reproductor (Música) |
+| Floración (Inicio) | Canciones (Índice A–Z) | Playlists |
 | :---: | :---: | :---: |
-| <img src="public/assets/aistudio/01-floracion_e229b77a.png" alt="Pantalla Floración" width="230" /> | <img src="public/assets/aistudio/05-coleccion_51b63c6a.png" alt="Pantalla Colección" width="230" /> | <img src="public/assets/aistudio/06-reproductor-musica_c02c8ccc.png" alt="Reproductor Música" width="230" /> |
+| <img src="public/assets/aistudio/screenshot_1_c58c7ab5.png" width="220" alt="Pantalla Floración" /> | <img src="public/assets/aistudio/screenshot_2_ffc40865.png" width="220" alt="Pantalla Canciones con índice vertical A–Z" /> | <img src="public/assets/aistudio/screenshot_3_f209375b.png" width="220" alt="Pantalla Playlists" /> |
 
-| Reproductor (Letras) | Ecualizador | Presentación general |
+| Detalle de Playlist | Mini-reproductor y desbloqueo | Ecualizador botánico |
 | :---: | :---: | :---: |
-| <img src="public/assets/aistudio/07-reproductor-letras_60952bc5.png" alt="Reproductor Letras" width="230" /> | <img src="public/assets/aistudio/08-ecualizador_2a83b30c.png" alt="Ecualizador" width="230" /> | <img src="public/assets/aistudio/09-shell-desktop_2a1d1edb.png" alt="Vista general del reproductor" width="320" /> |
+| <img src="public/assets/aistudio/screenshot_4_5d8ab5d1.png" width="220" alt="Detalle de Playlist Ciénaga dorada" /> | <img src="public/assets/aistudio/screenshot_5_5ccba310.png" width="220" alt="Mini-reproductor y notificación de especie florecida" /> | <img src="public/assets/aistudio/screenshot_6_151e2da8.png" width="220" alt="Ecualizador visual de tallos botánicos" /> |
 
 ---
 

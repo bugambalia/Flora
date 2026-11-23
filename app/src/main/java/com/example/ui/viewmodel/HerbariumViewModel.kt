@@ -2,6 +2,7 @@ package com.example.ui.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.HerbariumApp
@@ -17,10 +18,13 @@ import com.example.data.model.BotanicalProgress
 import com.example.data.model.BotanicalSpecies
 import com.example.data.model.BotanicalSpeciesId
 import com.example.data.model.EqualizerPreset
+import com.example.data.model.LibraryCatalogData
 import com.example.data.model.PlaybackState
 import com.example.data.model.PlaylistWithTracks
 import com.example.data.model.ThemeBackgroundGradients
+import com.example.data.model.buildLibraryCatalogData
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -30,16 +34,19 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+@Immutable
 data class HerbariumUiState(
   val isLoading: Boolean = true,
   val isScanningFolders: Boolean = false,
   val tracks: List<AudioTrack> = emptyList(),
   val filteredTracks: List<AudioTrack> = emptyList(),
+  val libraryCatalog: LibraryCatalogData = LibraryCatalogData(),
   val availableGenres: List<String> = emptyList(),
   val searchQuery: String = "",
   val selectedGenre: String? = null,
@@ -61,6 +68,7 @@ private data class CatalogSnapshot(
   val isScanningFolders: Boolean = false,
   val tracks: List<AudioTrack> = emptyList(),
   val filteredTracks: List<AudioTrack> = emptyList(),
+  val libraryCatalog: LibraryCatalogData = LibraryCatalogData(),
   val availableGenres: List<String> = emptyList(),
   val searchQuery: String = "",
   val selectedGenre: String? = null,
@@ -81,8 +89,16 @@ class HerbariumViewModel(application: Application) : AndroidViewModel(applicatio
   private val paletteService = app.albumPaletteService
 
   val audioSpectrum: StateFlow<BotanicalAudioSpectrum> = app.frequencyAnalyzer.spectrumState
+  val playbackPositionMs: StateFlow<Long> = playbackController.positionMsFlow
 
   private val searchQuery = MutableStateFlow("")
+  val searchQueryState: StateFlow<String> = searchQuery.asStateFlow()
+
+  @OptIn(FlowPreview::class)
+  private val debouncedSearchQuery = searchQuery
+    .debounce { if (it.isBlank()) 0L else 150L }
+    .distinctUntilChanged()
+
   private val selectedGenre = MutableStateFlow<String?>(null)
   private val selectedSourcePath = MutableStateFlow<String?>(null)
   private val detectedFolders = MutableStateFlow<List<DetectedFolderSource>>(emptyList())
@@ -101,7 +117,7 @@ class HerbariumViewModel(application: Application) : AndroidViewModel(applicatio
     repository.tracksFlow,
     repository.playlistsFlow,
     repository.botanicalProgressFlow,
-    searchQuery,
+    debouncedSearchQuery,
     selectedGenre,
     selectedSourcePath,
     detectedFolders,
@@ -155,11 +171,14 @@ class HerbariumViewModel(application: Application) : AndroidViewModel(applicatio
       matchesQuery && matchesGenre && matchesSource
     }
 
+    val libraryCatalog = buildLibraryCatalogData(filtered)
+
     CatalogSnapshot(
       isLoading = !ready,
       isScanningFolders = scanning,
       tracks = tracks,
       filteredTracks = filtered,
+      libraryCatalog = libraryCatalog,
       availableGenres = genres,
       searchQuery = query,
       selectedGenre = genre,
@@ -195,6 +214,7 @@ class HerbariumViewModel(application: Application) : AndroidViewModel(applicatio
       isScanningFolders = catalog.isScanningFolders,
       tracks = catalog.tracks,
       filteredTracks = catalog.filteredTracks,
+      libraryCatalog = catalog.libraryCatalog,
       availableGenres = catalog.availableGenres,
       searchQuery = catalog.searchQuery,
       selectedGenre = catalog.selectedGenre,
@@ -304,6 +324,10 @@ class HerbariumViewModel(application: Application) : AndroidViewModel(applicatio
 
   fun onSearchQueryChange(query: String) {
     searchQuery.value = query
+  }
+
+  fun setVisualizerActive(active: Boolean) {
+    app.frequencyAnalyzer.setVisualizationEnabled(active)
   }
 
   fun onSelectGenre(genre: String?) {

@@ -490,4 +490,72 @@ class ExampleRobolectricTest {
     composeTestRule.onNode(androidx.compose.ui.test.hasTestTag("section_header_A")).assertExists()
     composeTestRule.onNode(androidx.compose.ui.test.hasTestTag("section_header_Z")).assertExists()
   }
+
+  @Test
+  fun `audio frequency analyzer skips handleBuffer FFT when visualizer is disabled`() {
+    val analyzer = AudioFrequencyAnalyzer()
+    analyzer.audioBufferSink.flush(44100, 1, androidx.media3.common.C.ENCODING_PCM_16BIT)
+
+    val sampleCount = 1024
+    val byteBuffer = java.nio.ByteBuffer.allocate(sampleCount * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    for (i in 0 until sampleCount) {
+      val sample = (kotlin.math.sin(2.0 * kotlin.math.PI * 220.0 * i / 44100.0) * 24000.0).toInt().toShort()
+      byteBuffer.putShort(sample)
+    }
+    byteBuffer.flip()
+
+    // Disabled by default -> handleBuffer must stay Idle without computing FFT
+    analyzer.audioBufferSink.handleBuffer(byteBuffer.duplicate())
+    assertEquals(BotanicalAudioSpectrum.Idle, analyzer.spectrumState.value)
+
+    // Enabled -> handleBuffer computes active spectrum
+    analyzer.setVisualizationEnabled(true)
+    analyzer.audioBufferSink.handleBuffer(byteBuffer.duplicate())
+    assertTrue(analyzer.spectrumState.value.isActive)
+
+    // Turning off resets spectrum back to Idle
+    analyzer.setVisualizationEnabled(false)
+    assertEquals(BotanicalAudioSpectrum.Idle, analyzer.spectrumState.value)
+  }
+
+  @Test
+  fun `buildLibraryCatalogData sorts tracks alphabetically with symbol section at end`() {
+    val tracks = listOf(
+      AudioTrack(
+        id = 1L, uri = "file:///1.wav", title = "99 Lotos", artist = "A",
+        album = "X", genre = "Folk", durationMs = 120_000L, bitrateKbps = 320,
+        sampleRateHz = 44100, codec = "WAV", coverPath = null,
+        speciesId = BotanicalSpeciesId.LOTUS, playCount = 0, isFavorite = false, isBundled = true
+      ),
+      AudioTrack(
+        id = 2L, uri = "file:///2.wav", title = "Orquídea", artist = "B",
+        album = "X", genre = "Jazz", durationMs = 120_000L, bitrateKbps = 320,
+        sampleRateHz = 44100, codec = "WAV", coverPath = null,
+        speciesId = BotanicalSpeciesId.LAVENDER, playCount = 0, isFavorite = false, isBundled = true
+      ),
+      AudioTrack(
+        id = 3L, uri = "file:///3.wav", title = "Alba", artist = "C",
+        album = "X", genre = "Ambient", durationMs = 120_000L, bitrateKbps = 320,
+        sampleRateHz = 44100, codec = "WAV", coverPath = null,
+        speciesId = BotanicalSpeciesId.MONSTERA, playCount = 0, isFavorite = false, isBundled = true
+      ),
+    )
+
+    val catalog = com.example.data.model.buildLibraryCatalogData(tracks)
+    assertEquals(listOf("Alba", "Orquídea", "99 Lotos"), catalog.sortedTracks.map { it.title })
+    assertEquals(setOf('A', 'O', '#'), catalog.availableLetters)
+    assertEquals(0, catalog.letterToItemIndex['A'])
+    assertEquals(2, catalog.letterToItemIndex['O'])
+    assertEquals(4, catalog.letterToItemIndex['#'])
+    assertEquals(1, catalog.sectionTrackCounts['A'])
+    assertEquals(1, catalog.sectionTrackCounts['O'])
+    assertEquals(1, catalog.sectionTrackCounts['#'])
+  }
+
+  @Test
+  fun `calculateInSampleSize downsamples oversized album art to power of two`() {
+    assertEquals(1, com.example.ui.components.calculateInSampleSize(128, 128, 128, 128))
+    assertEquals(8, com.example.ui.components.calculateInSampleSize(1200, 1200, 128, 128))
+    assertEquals(2, com.example.ui.components.calculateInSampleSize(600, 600, 192, 192))
+  }
 }

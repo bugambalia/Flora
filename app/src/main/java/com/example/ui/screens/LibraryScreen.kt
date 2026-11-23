@@ -82,6 +82,9 @@ import androidx.compose.ui.unit.sp
 import com.example.audio.DetectedFolderSource
 import com.example.data.model.AudioTrack
 import com.example.data.model.BotanicalSpeciesId
+import com.example.data.model.LibraryRowItem
+import com.example.data.model.buildLibraryCatalogData
+import com.example.data.model.chSortPriority
 import com.example.ui.components.AlbumArtFrame
 import com.example.ui.components.FloraDashedEmptyPlate
 import com.example.ui.components.FloraFlowerGlyph
@@ -107,31 +110,6 @@ import com.example.ui.viewmodel.HerbariumUiState
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private sealed interface LibraryRowItem {
-  val key: String
-  val sectionChar: Char
-
-  data class SectionHeader(
-    override val sectionChar: Char,
-    val count: Int,
-  ) : LibraryRowItem {
-    override val key: String = "hdr_$sectionChar"
-  }
-
-  data class TrackRow(
-    val track: AudioTrack,
-    val flatIndex: Int,
-    override val sectionChar: Char,
-  ) : LibraryRowItem {
-    override val key: String = "tr_${track.id}"
-  }
-}
-
-private fun trackSectionChar(title: String): Char {
-  val ch = title.trim().firstOrNull()?.uppercaseChar()
-  return if (ch != null && ch in 'A'..'Z') ch else '#'
-}
-
 @Composable
 fun LibraryScreen(
   uiState: HerbariumUiState,
@@ -147,41 +125,24 @@ fun LibraryScreen(
   onInspectSpecies: (BotanicalSpeciesId) -> Unit,
   onOpenHerbarium: () -> Unit,
   modifier: Modifier = Modifier,
+  searchQuery: String = uiState.searchQuery,
 ) {
   val currentTrackId = uiState.playbackState.currentTrack?.id
   var showSourcesDialog by remember { mutableStateOf(false) }
 
-  val sortedTracks = remember(uiState.filteredTracks) {
-    uiState.filteredTracks.sortedWith(
-      compareBy<AudioTrack> { chSortPriority(trackSectionChar(it.title)) }
-        .thenBy { it.title.trim().lowercase() }
-    )
-  }
-
-  val availableLetters = remember(sortedTracks) {
-    buildSet {
-      sortedTracks.forEach { add(trackSectionChar(it.title)) }
+  // Precomputed on Dispatchers.Default in HerbariumViewModel; fallback keeps direct test states working
+  val catalog = remember(uiState.libraryCatalog, uiState.filteredTracks) {
+    if (uiState.libraryCatalog.rowItems.isNotEmpty() || uiState.filteredTracks.isEmpty()) {
+      uiState.libraryCatalog
+    } else {
+      buildLibraryCatalogData(uiState.filteredTracks)
     }
   }
-
-  val (rowItems, letterToItemIndex, sectionTrackCounts) = remember(sortedTracks) {
-    val rows = mutableListOf<LibraryRowItem>()
-    val indexMap = mutableMapOf<Char, Int>()
-    val grouped = sortedTracks.groupBy { trackSectionChar(it.title) }
-    val counts = grouped.mapValues { it.value.size }
-    var flatIdx = 0
-    val orderedKeys = grouped.keys.sortedBy { chSortPriority(it) * 1000 + it.code }
-    for (secChar in orderedKeys) {
-      val tracksInSection = grouped[secChar].orEmpty()
-      indexMap[secChar] = rows.size
-      rows += LibraryRowItem.SectionHeader(sectionChar = secChar, count = tracksInSection.size)
-      for (t in tracksInSection) {
-        rows += LibraryRowItem.TrackRow(track = t, flatIndex = flatIdx, sectionChar = secChar)
-        flatIdx++
-      }
-    }
-    Triple(rows, indexMap, counts)
-  }
+  val sortedTracks = catalog.sortedTracks
+  val availableLetters = catalog.availableLetters
+  val rowItems = catalog.rowItems
+  val letterToItemIndex = catalog.letterToItemIndex
+  val sectionTrackCounts = catalog.sectionTrackCounts
 
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
@@ -245,7 +206,7 @@ fun LibraryScreen(
           )
           Spacer(modifier = Modifier.width(10.dp))
           Box(modifier = Modifier.weight(1f)) {
-            if (uiState.searchQuery.isEmpty()) {
+            if (searchQuery.isEmpty()) {
               Text(
                 text = "Buscar canción, artista o fuente",
                 style = MaterialTheme.typography.bodyMedium,
@@ -253,7 +214,7 @@ fun LibraryScreen(
               )
             }
             BasicTextField(
-              value = uiState.searchQuery,
+              value = searchQuery,
               onValueChange = onSearchChange,
               singleLine = true,
               textStyle = MaterialTheme.typography.bodyMedium.copy(color = FloraInk),
@@ -263,7 +224,7 @@ fun LibraryScreen(
                 .testTag("library_search_input")
             )
           }
-          if (uiState.searchQuery.isNotEmpty()) {
+          if (searchQuery.isNotEmpty()) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(
               text = "Limpiar",
@@ -616,8 +577,6 @@ fun LibraryScreen(
     )
   }
 }
-
-private fun chSortPriority(ch: Char): Int = if (ch == '#') 1 else 0
 
 @Composable
 private fun AlphabetSectionDivider(

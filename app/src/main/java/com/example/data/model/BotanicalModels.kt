@@ -1,6 +1,7 @@
 package com.example.data.model
 
 import androidx.annotation.DrawableRes
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import com.example.R
 
@@ -168,6 +169,7 @@ enum class BotanicalPlayerTheme(
   }
 }
 
+@Immutable
 data class AnatomicalCallout(
   val number: Int,
   val label: String,
@@ -178,6 +180,7 @@ data class AnatomicalCallout(
   val labelOnLeft: Boolean = false,
 )
 
+@Immutable
 data class BotanicalSpecies(
   val id: BotanicalSpeciesId,
   val commonName: String,
@@ -522,6 +525,7 @@ object BotanicalLyricsCatalog {
   }
 }
 
+@Immutable
 data class AudioTrack(
   val id: Long,
   val uri: String,
@@ -542,6 +546,7 @@ data class AudioTrack(
   val sourcePath: String = "herbarium://bundled",
 )
 
+@Immutable
 data class AudioSourceSummary(
   val folderName: String,
   val folderPath: String,
@@ -550,6 +555,7 @@ data class AudioSourceSummary(
   val isPersistedFolder: Boolean = false,
 )
 
+@Immutable
 data class Playlist(
   val id: Long,
   val name: String,
@@ -559,6 +565,7 @@ data class Playlist(
   val updatedAt: Long,
 )
 
+@Immutable
 data class PlaylistWithTracks(
   val playlist: Playlist,
   val tracks: List<AudioTrack>,
@@ -566,6 +573,7 @@ data class PlaylistWithTracks(
   val totalDurationMs: Long get() = tracks.sumOf { it.durationMs }
 }
 
+@Immutable
 data class BotanicalProgress(
   val speciesId: BotanicalSpeciesId,
   val isUnlocked: Boolean,
@@ -574,6 +582,7 @@ data class BotanicalProgress(
   val listenSeconds: Int,
 )
 
+@Immutable
 data class AlbumPaletteColors(
   val dominant: Color = Color(0xFF204235),
   val vibrant: Color = Color(0xFFB8442C),
@@ -584,6 +593,7 @@ data class AlbumPaletteColors(
   val onAccent: Color = Color(0xFFFFFAF0),
 )
 
+@Immutable
 data class ThemeBackgroundGradients(
   val parchmentTop: Color = Color(0xFFF6EFE0),
   val parchmentBottom: Color = Color(0xFFEBE1CA),
@@ -685,6 +695,7 @@ enum class EqualizerPreset(
   ),
 }
 
+@Immutable
 data class AudioEffectsState(
   val equalizerEnabled: Boolean = true,
   val preset: EqualizerPreset = EqualizerPreset.CUSTOM,
@@ -704,6 +715,7 @@ data class AudioEffectsState(
 
 enum class RepeatModeOption { OFF, ALL, ONE }
 
+@Immutable
 data class PlaybackState(
   val currentTrack: AudioTrack? = null,
   val queue: List<AudioTrack> = emptyList(),
@@ -718,3 +730,90 @@ data class PlaybackState(
   val audioSessionId: Int = 0,
   val gaplessTransitionsCount: Int = 0,
 )
+
+@Immutable
+sealed interface LibraryRowItem {
+  val key: String
+  val sectionChar: Char
+
+  @Immutable
+  data class SectionHeader(
+    override val sectionChar: Char,
+    val count: Int,
+  ) : LibraryRowItem {
+    override val key: String = "hdr_$sectionChar"
+  }
+
+  @Immutable
+  data class TrackRow(
+    val track: AudioTrack,
+    val flatIndex: Int,
+    override val sectionChar: Char,
+  ) : LibraryRowItem {
+    override val key: String = "tr_${track.id}"
+  }
+}
+
+@Immutable
+data class LibraryCatalogData(
+  val sortedTracks: List<AudioTrack> = emptyList(),
+  val rowItems: List<LibraryRowItem> = emptyList(),
+  val availableLetters: Set<Char> = emptySet(),
+  val letterToItemIndex: Map<Char, Int> = emptyMap(),
+  val sectionTrackCounts: Map<Char, Int> = emptyMap(),
+)
+
+fun trackSectionChar(title: String): Char {
+  val ch = title.trim().firstOrNull()?.uppercaseChar()
+  return if (ch != null && ch in 'A'..'Z') ch else '#'
+}
+
+fun chSortPriority(ch: Char): Int = if (ch == '#') 1 else 0
+
+fun buildLibraryCatalogData(tracks: List<AudioTrack>): LibraryCatalogData {
+  if (tracks.isEmpty()) return LibraryCatalogData()
+  val sorted = tracks.sortedWith(
+    compareBy<AudioTrack> { chSortPriority(trackSectionChar(it.title)) }
+      .thenBy { it.title.trim().lowercase() }
+  )
+  val rows = ArrayList<LibraryRowItem>(sorted.size + 26)
+  val indexMap = HashMap<Char, Int>(32)
+  val counts = HashMap<Char, Int>(32)
+  val available = HashSet<Char>(32)
+
+  var currentSection: Char? = null
+  var sectionHeaderPos = -1
+  var sectionCount = 0
+  var flatIdx = 0
+
+  for (track in sorted) {
+    val secChar = trackSectionChar(track.title)
+    if (secChar != currentSection) {
+      if (currentSection != null && sectionHeaderPos >= 0) {
+        rows[sectionHeaderPos] = LibraryRowItem.SectionHeader(currentSection, sectionCount)
+        counts[currentSection] = sectionCount
+      }
+      currentSection = secChar
+      available.add(secChar)
+      indexMap[secChar] = rows.size
+      sectionHeaderPos = rows.size
+      sectionCount = 0
+      rows.add(LibraryRowItem.SectionHeader(secChar, 0))
+    }
+    rows.add(LibraryRowItem.TrackRow(track = track, flatIndex = flatIdx, sectionChar = secChar))
+    sectionCount++
+    flatIdx++
+  }
+  if (currentSection != null && sectionHeaderPos >= 0) {
+    rows[sectionHeaderPos] = LibraryRowItem.SectionHeader(currentSection, sectionCount)
+    counts[currentSection] = sectionCount
+  }
+
+  return LibraryCatalogData(
+    sortedTracks = sorted,
+    rowItems = rows,
+    availableLetters = available,
+    letterToItemIndex = indexMap,
+    sectionTrackCounts = counts,
+  )
+}

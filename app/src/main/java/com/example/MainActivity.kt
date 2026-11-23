@@ -183,6 +183,10 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
     }
   }
 
+  LaunchedEffect(showNowPlaying) {
+    viewModel.setVisualizerActive(showNowPlaying)
+  }
+
   HerbariumTheme(
     albumPalette = uiState.albumPalette,
     themeGradients = uiState.themeGradients,
@@ -228,6 +232,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                   ) {
                     MiniPlayerBar(
                       playbackState = uiState.playbackState,
+                      positionMsFlow = viewModel.playbackPositionMs,
                       onTogglePlayPause = viewModel::togglePlayPause,
                       onPrevious = viewModel::previous,
                       onNext = viewModel::next,
@@ -406,8 +411,10 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                     }
 
                     composable<LibraryRoute> {
+                      val liveSearchQuery by viewModel.searchQueryState.collectAsStateWithLifecycle()
                       LibraryScreen(
                         uiState = uiState,
+                        searchQuery = liveSearchQuery,
                         onSearchChange = viewModel::onSearchQueryChange,
                         onSelectSourcePath = viewModel::onSelectSourcePath,
                         onPlayTrack = { list, idx ->
@@ -450,6 +457,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                 if (isExpanded && uiState.playbackState.currentTrack != null && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay) {
                   MiniPlayerBar(
                     playbackState = uiState.playbackState,
+                    positionMsFlow = viewModel.playbackPositionMs,
                     onTogglePlayPause = viewModel::togglePlayPause,
                     onPrevious = viewModel::previous,
                     onNext = viewModel::next,
@@ -505,6 +513,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
         NowPlayingScreen(
           uiState = uiState,
           audioSpectrumFlow = viewModel.audioSpectrum,
+          positionMsFlow = viewModel.playbackPositionMs,
           onClose = { showNowPlaying = false },
           onTogglePlayPause = viewModel::togglePlayPause,
           onSeekTo = viewModel::seekTo,

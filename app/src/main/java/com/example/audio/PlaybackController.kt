@@ -39,6 +39,9 @@ class PlaybackController(private val context: Context) {
   private val _playbackState = MutableStateFlow(PlaybackState())
   val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
 
+  private val _positionMsFlow = MutableStateFlow(0L)
+  val positionMsFlow: StateFlow<Long> = _positionMsFlow.asStateFlow()
+
   private val _sleepMinutesRemaining = MutableStateFlow<Int?>(null)
   val sleepMinutesRemaining: StateFlow<Int?> = _sleepMinutesRemaining.asStateFlow()
 
@@ -88,6 +91,7 @@ class PlaybackController(private val context: Context) {
         val currentIdx = controller.currentMediaItemIndex
         val track = _playbackState.value.queue.getOrNull(currentIdx)
         val wasGapless = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
+        _positionMsFlow.value = 0L
         _playbackState.update {
           it.copy(
             currentIndex = currentIdx,
@@ -127,12 +131,13 @@ class PlaybackController(private val context: Context) {
   private fun syncStateFromPlayer(controller: MediaController) {
     val idx = controller.currentMediaItemIndex
     val track = _playbackState.value.queue.getOrNull(idx)
+    val pos = controller.currentPosition.coerceAtLeast(0L)
+    _positionMsFlow.value = pos
     _playbackState.update {
       it.copy(
         currentIndex = idx,
         currentTrack = track ?: it.currentTrack,
         isPlaying = controller.isPlaying,
-        positionMs = controller.currentPosition.coerceAtLeast(0L),
         durationMs = controller.duration.takeIf { d -> d > 0 } ?: track?.durationMs ?: it.durationMs,
         bufferedPercentage = controller.bufferedPercentage,
       )
@@ -147,15 +152,13 @@ class PlaybackController(private val context: Context) {
         mediaController?.let { c ->
           if (c.isPlaying) {
             val pos = c.currentPosition.coerceAtLeast(0L)
-            val dur = c.duration.takeIf { d -> d > 0 } ?: _playbackState.value.currentTrack?.durationMs ?: 0L
-            _playbackState.update { state ->
-              state.copy(
-                positionMs = pos,
-                durationMs = dur,
-                bufferedPercentage = c.bufferedPercentage
-              )
+            val state = _playbackState.value
+            val dur = c.duration.takeIf { d -> d > 0 } ?: state.currentTrack?.durationMs ?: 0L
+            _positionMsFlow.value = pos
+            if (dur > 0L && dur != state.durationMs) {
+              _playbackState.update { it.copy(durationMs = dur) }
             }
-            val currentId = _playbackState.value.currentTrack?.id
+            val currentId = state.currentTrack?.id
             val remaining = dur - pos
             if (pendingCrossfade &&
               dur > 4_000L &&
@@ -192,6 +195,7 @@ class PlaybackController(private val context: Context) {
       BotanicalPlaybackService.armCrossfade(CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS)
     }
 
+    _positionMsFlow.value = 0L
     _playbackState.update {
       it.copy(
         queue = tracks,
@@ -280,6 +284,7 @@ class PlaybackController(private val context: Context) {
     if (pendingCrossfade && mediaController?.isPlaying == true) {
       BotanicalPlaybackService.armCrossfade(CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS)
     }
+    _positionMsFlow.value = 0L
     _playbackState.update { it.copy(currentIndex = index, currentTrack = track, positionMs = 0L) }
     mediaController?.let { c ->
       c.seekToDefaultPosition(index)
@@ -302,7 +307,7 @@ class PlaybackController(private val context: Context) {
 
   fun seekTo(positionMs: Long) {
     val clamped = positionMs.coerceAtLeast(0L)
-    _playbackState.update { it.copy(positionMs = clamped) }
+    _positionMsFlow.value = clamped
     mediaController?.seekTo(clamped)
   }
 
