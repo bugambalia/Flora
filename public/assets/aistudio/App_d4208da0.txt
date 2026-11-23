@@ -1,0 +1,578 @@
+import { useEffect, useMemo, useState } from "react";
+
+type IconName =
+  | "home"
+  | "search"
+  | "library"
+  | "heart"
+  | "play"
+  | "pause"
+  | "next"
+  | "previous"
+  | "chevron"
+  | "down"
+  | "sliders"
+  | "share";
+
+function Icon({
+  name,
+  size = 22,
+  filled = false,
+}: {
+  name: IconName;
+  size?: number;
+  filled?: boolean;
+}) {
+  const paths: Record<IconName, React.ReactNode> = {
+    home: (
+      <>
+        <path d="m3 11 9-8 9 8" />
+        <path d="M5 10v10h14V10M9 20v-6h6v6" />
+      </>
+    ),
+    search: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-4-4" />
+      </>
+    ),
+    library: (
+      <>
+        <path d="M5 4v16M10 4v16M15 6l4-1 2 14-4 1z" />
+      </>
+    ),
+    heart: (
+      <path d="M20.8 5.8a5.5 5.5 0 0 0-7.8 0L12 6.9l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 22l8.8-8.4a5.5 5.5 0 0 0 0-7.8Z" />
+    ),
+    play: <path d="m8 5 11 7-11 7Z" />,
+    pause: (
+      <>
+        <path d="M9 5v14M15 5v14" />
+      </>
+    ),
+    next: (
+      <>
+        <path d="m6 5 10 7L6 19Z" />
+        <path d="M18 5v14" />
+      </>
+    ),
+    previous: (
+      <>
+        <path d="m18 5-10 7 10 7Z" />
+        <path d="M6 5v14" />
+      </>
+    ),
+    chevron: <path d="m9 18 6-6-6-6" />,
+    down: <path d="m5 9 7 7 7-7" />,
+    sliders: (
+      <>
+        <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
+        <path d="M1 14h6M9 8h6M17 16h6" />
+      </>
+    ),
+    share: (
+      <>
+        <circle cx="18" cy="5" r="2.5" />
+        <circle cx="6" cy="12" r="2.5" />
+        <circle cx="18" cy="19" r="2.5" />
+        <path d="m8.2 10.8 7.6-4.5M8.2 13.2l7.6 4.5" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
+const collections = [
+  {
+    name: "Selva húmeda",
+    detail: "12 canciones",
+    image:
+      "https://images.unsplash.com/photo-1722902296925-33f1d0aa4fa9?auto=format&fit=crop&w=700&q=85",
+    color: "#b94737",
+    plant: "Heliconia rostrata",
+  },
+  {
+    name: "Bosque andino",
+    detail: "8 canciones",
+    image:
+      "https://images.unsplash.com/photo-1671323101758-468a5979fca2?auto=format&fit=crop&w=700&q=85",
+    color: "#8b6793",
+    plant: "Orquídea colombiana",
+  },
+  {
+    name: "Valle dorado",
+    detail: "10 canciones",
+    image:
+      "https://images.unsplash.com/photo-1760876746054-a2bae5ba5a7f?auto=format&fit=crop&w=700&q=85",
+    color: "#d49c2d",
+    plant: "Guayacán amarillo",
+  },
+];
+
+const tracks = [
+  { title: "Canto del Quindío", artist: "Lucía Monte", duration: "3:42", collection: 0 },
+  { title: "Bruma en Cocora", artist: "Río Adentro", duration: "4:16", collection: 1 },
+  { title: "Heliconia", artist: "Amalia Sur", duration: "3:28", collection: 0 },
+];
+
+const lyrics = [
+  "Entre la niebla despierta el valle",
+  "la palma roza la mañana",
+  "y el río guarda entre sus piedras",
+  "el canto verde de la montaña",
+  "Vuelvo a encontrarme en tus caminos",
+  "bajo la flor del guayacán",
+  "llevo el rumor de la cordillera",
+  "como una luz al caminar",
+];
+
+const frequencies = ["32", "63", "125", "250", "500", "1K", "2K", "4K", "8K", "16K"];
+const initialBands = [64, 43, 71, 38, 32, 55, 45, 36, 48, 78];
+
+function BotanicalMark() {
+  return (
+    <svg className="botanical-mark" viewBox="0 0 180 150" aria-hidden="true">
+      <path d="M15 143C51 107 55 60 87 18M56 101C33 94 24 77 23 57c23 4 38 17 42 35M73 65C99 61 114 44 119 23 94 22 78 37 73 65M42 120c21-1 35-10 44-28M88 91c24 2 40 15 48 35-24 4-42-8-48-35" />
+      <path
+        className="flower"
+        d="M117 22c-5-15 5-22 12-20 6 2 8 9 5 16 8-8 18-5 19 2 1 8-7 14-17 11 6 8 1 18-7 18-9 0-12-10-7-18-10 4-18-2-18-10 0-7 7-10 13-7Z"
+      />
+    </svg>
+  );
+}
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<"Inicio" | "Buscar" | "Biblioteca">("Inicio");
+  const [current, setCurrent] = useState(0);
+  const [playing, setPlaying] = useState(true);
+  const [liked, setLiked] = useState(true);
+  const [progress, setProgress] = useState(36);
+  const [query, setQuery] = useState("");
+  const [screen, setScreen] = useState<"main" | "player" | "equalizer">("main");
+  const [playerTab, setPlayerTab] = useState<"music" | "lyrics">("music");
+  const [equalizerOn, setEqualizerOn] = useState(true);
+  const [bands, setBands] = useState(initialBands);
+  const [preset, setPreset] = useState("Personalizado");
+
+  useEffect(() => {
+    if (!playing) return;
+    const timer = window.setInterval(
+      () => setProgress((value) => (value >= 100 ? 0 : value + 0.2)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [playing]);
+
+  const filtered = useMemo(() => {
+    const normalized = query.toLowerCase();
+    return collections.filter((item) =>
+      `${item.name} ${item.plant}`.toLowerCase().includes(normalized),
+    );
+  }, [query]);
+
+  const changeTrack = (direction: number) => {
+    setCurrent((value) => (value + direction + tracks.length) % tracks.length);
+    setProgress(0);
+    setPlaying(true);
+  };
+
+  const updateBand = (index: number, value: number) => {
+    setBands((values) => values.map((band, bandIndex) => (bandIndex === index ? value : band)));
+    setPreset("Personalizado");
+  };
+
+  return (
+    <main className="app-shell">
+      <div className="background-botany left">
+        <BotanicalMark />
+      </div>
+      <div className="background-botany right">
+        <BotanicalMark />
+      </div>
+
+      <section className="phone" aria-label="Aplicación de música Flor Sonora">
+        <div className="status-bar">
+          <span>9:41</span>
+          <div className="status-icons">
+            <span className="signal">▮▮▮</span>
+            <span>Wi‑Fi</span>
+            <span className="battery" />
+          </div>
+        </div>
+
+        {screen === "main" && (
+          <div className="content">
+            <header className="topbar">
+              <h1>{activeTab}</h1>
+              <button className="avatar" aria-label="Abrir perfil">
+                M
+              </button>
+            </header>
+
+            {activeTab === "Inicio" && (
+              <>
+                <article className="hero-card">
+                  <div className="hero-image-wrap">
+                    <img
+                      src={collections[current % collections.length].image}
+                      alt={`Detalle de ${collections[current % collections.length].plant}`}
+                    />
+                    <div className="image-caption">
+                      <i /> {collections[current % collections.length].plant}
+                    </div>
+                  </div>
+                  <div className="hero-copy">
+                    <h2>
+                      Flores que
+                      <br />
+                      también cantan
+                    </h2>
+                    <button onClick={() => setPlaying(true)}>
+                      <Icon name="play" size={16} filled /> Reproducir
+                    </button>
+                  </div>
+                  <BotanicalMark />
+                </article>
+
+                <div className="section-heading">
+                  <h2>Ecosistemas</h2>
+                  <button onClick={() => setActiveTab("Biblioteca")}>
+                    Ver todo <Icon name="chevron" size={17} />
+                  </button>
+                </div>
+                <div className="collection-row">
+                  {collections.map((item, index) => (
+                    <button
+                      className="collection-card"
+                      key={item.name}
+                      onClick={() => {
+                        setCurrent(index);
+                        setPlaying(true);
+                      }}
+                    >
+                      <div className="collection-image" style={{ borderColor: item.color }}>
+                        <img src={item.image} alt={item.plant} />
+                        <span style={{ backgroundColor: item.color }}>
+                          <Icon name="play" size={14} filled />
+                        </span>
+                      </div>
+                      <strong>{item.name}</strong>
+                      <small>{item.detail}</small>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {activeTab === "Buscar" && (
+              <section className="search-view">
+                <label className="search-box">
+                  <Icon name="search" size={19} />
+                  <input
+                    autoFocus
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Busca una flor o un paisaje"
+                  />
+                </label>
+                <div className="search-results">
+                  {filtered.map((item, index) => (
+                    <button
+                      key={item.name}
+                      onClick={() => {
+                        setCurrent(index);
+                        setPlaying(true);
+                      }}
+                    >
+                      <img src={item.image} alt="" />
+                      <span>
+                        <strong>{item.name}</strong>
+                        <small>{item.plant}</small>
+                      </span>
+                      <Icon name="play" filled size={18} />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {activeTab === "Biblioteca" && (
+              <section className="library-view">
+                <div className="library-cover">
+                  <img src={collections[1].image} alt="Orquídea colombiana" />
+                  <BotanicalMark />
+                </div>
+                <div className="track-list">
+                  {tracks.map((track, index) => (
+                    <button
+                      key={track.title}
+                      onClick={() => {
+                        setCurrent(index);
+                        setPlaying(true);
+                      }}
+                    >
+                      <span className="track-number">
+                        {current === index && playing ? "♪" : `0${index + 1}`}
+                      </span>
+                      <span>
+                        <strong>{track.title}</strong>
+                        <small>{track.artist}</small>
+                      </span>
+                      <time>{track.duration}</time>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+
+        {screen === "main" && (
+          <div className="player">
+            <button
+              className="player-open player-art"
+              onClick={() => setScreen("player")}
+              aria-label="Abrir reproductor"
+            >
+              <img src={collections[tracks[current].collection].image} alt="" />
+            </button>
+            <button className="player-open player-info" onClick={() => setScreen("player")}>
+              <strong>{tracks[current].title}</strong>
+              <span>{tracks[current].artist}</span>
+            </button>
+            <button
+              className={`like ${liked ? "active" : ""}`}
+              onClick={() => setLiked(!liked)}
+              aria-label="Me gusta"
+            >
+              <Icon name="heart" size={19} filled={liked} />
+            </button>
+            <button onClick={() => changeTrack(-1)} aria-label="Anterior">
+              <Icon name="previous" size={20} filled />
+            </button>
+            <button
+              className="play-main"
+              onClick={() => setPlaying(!playing)}
+              aria-label={playing ? "Pausar" : "Reproducir"}
+            >
+              <Icon name={playing ? "pause" : "play"} size={20} filled />
+            </button>
+            <button onClick={() => changeTrack(1)} aria-label="Siguiente">
+              <Icon name="next" size={20} filled />
+            </button>
+            <div className="progress">
+              <i style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
+
+        {screen === "main" && (
+          <nav>
+            {(
+              [
+                ["Inicio", "home"],
+                ["Buscar", "search"],
+                ["Biblioteca", "library"],
+              ] as const
+            ).map(([label, icon]) => (
+              <button
+                className={activeTab === label ? "active" : ""}
+                key={label}
+                onClick={() => setActiveTab(label)}
+              >
+                <span>
+                  <Icon name={icon} size={21} filled={activeTab === label && icon === "home"} />
+                </span>
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+
+        {screen === "player" && (
+          <section className="full-player">
+            <header className="full-player-header">
+              <button onClick={() => setScreen("main")} aria-label="Cerrar reproductor">
+                <Icon name="down" />
+              </button>
+              <div className="player-tabs">
+                <button
+                  className={playerTab === "music" ? "active" : ""}
+                  onClick={() => setPlayerTab("music")}
+                >
+                  Música
+                </button>
+                <i />
+                <button
+                  className={playerTab === "lyrics" ? "active" : ""}
+                  onClick={() => setPlayerTab("lyrics")}
+                >
+                  Letras
+                </button>
+              </div>
+              <button onClick={() => setScreen("equalizer")} aria-label="Abrir ecualizador">
+                <Icon name="sliders" />
+              </button>
+            </header>
+
+            {playerTab === "music" ? (
+              <div className="music-panel">
+                <div className={`visualizer ${playing ? "playing" : ""}`}>
+                  <div className="visualizer-ring" />
+                  <img
+                    src={collections[tracks[current].collection].image}
+                    alt={collections[tracks[current].collection].plant}
+                  />
+                </div>
+                <BotanicalMark />
+                <div className="song-details">
+                  <div>
+                    <h2>{tracks[current].title}</h2>
+                    <p>{tracks[current].artist}</p>
+                  </div>
+                  <div className="song-actions">
+                    <button
+                      className={liked ? "active" : ""}
+                      onClick={() => setLiked(!liked)}
+                      aria-label="Me gusta"
+                    >
+                      <Icon name="heart" filled={liked} />
+                    </button>
+                    <button aria-label="Compartir">
+                      <Icon name="share" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="lyrics-panel">
+                <BotanicalMark />
+                {lyrics.map((line, index) => (
+                  <p className={index === Math.floor(progress / 14) ? "active" : ""} key={line}>
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            <div className="full-controls">
+              <button
+                className="progress-seek"
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setProgress(((event.clientX - rect.left) / rect.width) * 100);
+                }}
+                aria-label="Cambiar posición"
+              >
+                <i style={{ width: `${progress}%` }}>
+                  <b />
+                </i>
+              </button>
+              <div className="time-row">
+                <span>1:34</span>
+                <span>{tracks[current].duration}</span>
+              </div>
+              <div className="control-row">
+                <button onClick={() => changeTrack(-1)} aria-label="Anterior">
+                  <Icon name="previous" size={27} filled />
+                </button>
+                <button
+                  className="full-play"
+                  onClick={() => setPlaying(!playing)}
+                  aria-label={playing ? "Pausar" : "Reproducir"}
+                >
+                  <Icon name={playing ? "pause" : "play"} size={30} filled />
+                </button>
+                <button onClick={() => changeTrack(1)} aria-label="Siguiente">
+                  <Icon name="next" size={27} filled />
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {screen === "equalizer" && (
+          <section className="equalizer-screen">
+            <header>
+              <button onClick={() => setScreen("player")} aria-label="Volver">
+                <Icon name="chevron" size={25} />
+              </button>
+              <h1>Ecualizador</h1>
+              <button
+                className={`switch ${equalizerOn ? "on" : ""}`}
+                onClick={() => setEqualizerOn(!equalizerOn)}
+                aria-label="Activar ecualizador"
+              >
+                <i />
+              </button>
+            </header>
+            <div className="eq-now">
+              <img src={collections[tracks[current].collection].image} alt="" />
+              <span>
+                <strong>{tracks[current].title}</strong>
+                <small>{tracks[current].artist}</small>
+              </span>
+              <button
+                onClick={() => setPlaying(!playing)}
+                aria-label={playing ? "Pausar" : "Reproducir"}
+              >
+                <Icon name={playing ? "pause" : "play"} filled size={18} />
+              </button>
+            </div>
+            <div className={`eq-board ${equalizerOn ? "" : "disabled"}`}>
+              <div className="eq-scale">
+                <span>+12</span>
+                <span>0</span>
+                <span>−12</span>
+              </div>
+              <div className="bands">
+                {bands.map((value, index) => (
+                  <label key={frequencies[index]}>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={value}
+                      onChange={(event) => updateBand(index, Number(event.target.value))}
+                    />
+                    <span>{frequencies[index]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="presets">
+              {["Personalizado", "Voz", "Bajos", "Agudos"].map((item) => (
+                <button
+                  className={preset === item ? "active" : ""}
+                  key={item}
+                  onClick={() => {
+                    setPreset(item);
+                    if (item === "Voz") setBands([25, 30, 42, 62, 78, 80, 70, 48, 34, 28]);
+                    if (item === "Bajos") setBands([88, 80, 68, 55, 40, 32, 28, 25, 22, 20]);
+                    if (item === "Agudos") setBands([22, 25, 28, 32, 38, 48, 64, 76, 84, 90]);
+                  }}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+      </section>
+    </main>
+  );
+}

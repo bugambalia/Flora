@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Flora</string>
+    <string name="nav_floracion">Floración</string>
+    <string name="nav_library">Canciones</string>
+    <string name="nav_playlists">Playlists</string>
+    <string name="nav_herbarium">Herbario</string>
+    <string name="nav_player">Reproductor</string>
+    <string name="action_import_audio">Importar audio</string>
+    <string name="action_play_all">Reproducir todo</string>
+    <string name="action_shuffle">Aleatorio</string>
+    <string name="action_create_playlist">Nueva lista</string>
+    <string name="action_equalizer">Ecualizador y Audio</string>
+    <string name="action_queue">Cola de reproducción</string>
+    <string name="notification_channel_name">Reproducción botánica</string>
+    <string name="scan_channel_name">Detección de fonoteca</string>
+    <string name="scan_service_notification_text">Buscando audios mayores a 90 s para Botanical Library</string>
+</resources>
