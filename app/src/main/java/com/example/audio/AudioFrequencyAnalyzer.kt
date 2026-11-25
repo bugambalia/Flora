@@ -12,10 +12,10 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Immutable
 data class BotanicalAudioSpectrum(
@@ -34,14 +34,15 @@ data class BotanicalAudioSpectrum(
 
 /**
  * Real-time PCM audio frequency analyzer wired directly into ExoPlayer's TeeAudioProcessor.
- * Computes 12 logarithmic frequency bands using a Hann-windowed Cooley-Tukey FFT without
- * requiring RECORD_AUDIO permissions.
+ * Computes 12 logarithmic frequency bands using a Hann-windowed Cooley-Tukey FFT with
+ * precomputed twiddle/bit-reversal/bin tables to avoid hot-path allocations.
  */
 class AudioFrequencyAnalyzer {
   private val _spectrumState = MutableStateFlow(BotanicalAudioSpectrum.Idle)
   val spectrumState: StateFlow<BotanicalAudioSpectrum> = _spectrumState.asStateFlow()
 
   private val fftSize = 512
+  private val log2N = 9
   private val sampleRing = FloatArray(fftSize)
   private var ringIndex = 0
   private var samplesAccumulated = 0
@@ -49,9 +50,39 @@ class AudioFrequencyAnalyzer {
   private val hannWindow = FloatArray(fftSize) { i ->
     (0.5 * (1.0 - cos(2.0 * PI * i / (fftSize - 1)))).toFloat()
   }
+  private val bitReversed = IntArray(fftSize) { i ->
+    var x = i
+    var r = 0
+    for (b in 0 until log2N) {
+      r = (r shl 1) or (x and 1)
+      x = x ushr 1
+    }
+    r
+  }
+
+  // Precomputed twiddle tables per radix-2 stage [0 until log2N]
+  private val stageCosTables = Array(log2N) { stage ->
+    val halfLen = 1 shl stage
+    val len = halfLen shl 1
+    val step = -2.0 * PI / len
+    FloatArray(halfLen) { k -> cos(step * k).toFloat() }
+  }
+  private val stageSinTables = Array(log2N) { stage ->
+    val halfLen = 1 shl stage
+    val len = halfLen shl 1
+    val step = -2.0 * PI / len
+    FloatArray(halfLen) { k -> sin(step * k).toFloat() }
+  }
+
   private val fftReal = FloatArray(fftSize)
   private val fftImag = FloatArray(fftSize)
   private val smoothedBands = FloatArray(BotanicalAudioSpectrum.BAND_COUNT)
+
+  private var cachedBinSampleRate = -1
+  private val bandBinStart = IntArray(BotanicalAudioSpectrum.BAND_COUNT)
+  private val bandBinEnd = IntArray(BotanicalAudioSpectrum.BAND_COUNT)
+  private val ln10 = ln(10f)
+  private val magNormDivisor = fftSize / 4f
 
   @Volatile
   private var sampleRateHz: Int = 44100
@@ -98,17 +129,30 @@ class AudioFrequencyAnalyzer {
         val totalFrames = copy.remaining() / frameBytes
         if (totalFrames <= 0) return
 
-        for (frame in 0 until totalFrames) {
-          var monoSum = 0f
-          for (ch in 0 until channels) {
-            if (copy.remaining() >= 2) {
-              monoSum += copy.short / 32768f
-            }
+        val invChannelsScale = 1f / (32768f * channels)
+        if (channels == 1) {
+          for (frame in 0 until totalFrames) {
+            sampleRing[ringIndex] = copy.short * invChannelsScale
+            ringIndex = (ringIndex + 1) and (fftSize - 1)
           }
-          sampleRing[ringIndex] = monoSum / channels
-          ringIndex = (ringIndex + 1) % fftSize
-          samplesAccumulated++
+        } else if (channels == 2) {
+          for (frame in 0 until totalFrames) {
+            val l = copy.short
+            val r = copy.short
+            sampleRing[ringIndex] = (l + r) * invChannelsScale
+            ringIndex = (ringIndex + 1) and (fftSize - 1)
+          }
+        } else {
+          for (frame in 0 until totalFrames) {
+            var monoSum = 0
+            for (ch in 0 until channels) {
+              monoSum += copy.short
+            }
+            sampleRing[ringIndex] = monoSum * invChannelsScale
+            ringIndex = (ringIndex + 1) and (fftSize - 1)
+          }
         }
+        samplesAccumulated += totalFrames
 
         if (samplesAccumulated >= fftSize / 2 && now - lastEmitTimeMs >= 24L) {
           lastEmitTimeMs = now
@@ -129,14 +173,15 @@ class AudioFrequencyAnalyzer {
     this.channelCount = channelCount.coerceAtLeast(1)
     val channels = this.channelCount
     val frames = samples.size / channels
+    val invChannelsScale = 1f / (32768f * channels)
     for (f in 0 until frames) {
-      var monoSum = 0f
+      var monoSum = 0
       val base = f * channels
       for (ch in 0 until channels) {
-        monoSum += samples[base + ch] / 32768f
+        monoSum += samples[base + ch]
       }
-      sampleRing[ringIndex] = monoSum / channels
-      ringIndex = (ringIndex + 1) % fftSize
+      sampleRing[ringIndex] = monoSum * invChannelsScale
+      ringIndex = (ringIndex + 1) and (fftSize - 1)
       samplesAccumulated++
     }
     return computeAndPublishSpectrum()
@@ -148,53 +193,85 @@ class AudioFrequencyAnalyzer {
     _spectrumState.value = BotanicalAudioSpectrum.Idle
   }
 
-  private fun computeAndPublishSpectrum(): BotanicalAudioSpectrum {
-    for (i in 0 until fftSize) {
-      val idx = (ringIndex + i) % fftSize
-      fftReal[i] = sampleRing[idx] * hannWindow[i]
-      fftImag[i] = 0f
-    }
-
-    fftInPlace(fftReal, fftImag)
-
-    val nyquist = sampleRateHz / 2f
+  private fun ensureBandBinsForSampleRate(sr: Int) {
+    if (cachedBinSampleRate == sr) return
+    cachedBinSampleRate = sr
+    val nyquist = sr / 2f
     val maxBin = fftSize / 2 - 1
     val minFreq = 45f
     val maxFreq = nyquist.coerceAtMost(12000f).coerceAtLeast(minFreq * 2f)
+    val freqRatio = maxFreq / minFreq
     val bandCount = BotanicalAudioSpectrum.BAND_COUNT
 
     for (b in 0 until bandCount) {
       val t0 = b.toFloat() / bandCount
       val t1 = (b + 1).toFloat() / bandCount
-      val f0 = minFreq * (maxFreq / minFreq).pow(t0)
-      val f1 = minFreq * (maxFreq / minFreq).pow(t1)
+      val f0 = minFreq * freqRatio.pow(t0)
+      val f1 = minFreq * freqRatio.pow(t1)
 
-      val bin0 = ((f0 * fftSize) / sampleRateHz).toInt().coerceIn(1, maxBin)
-      val bin1 = ((f1 * fftSize) / sampleRateHz).toInt().coerceIn(bin0, maxBin)
+      val bin0 = ((f0 * fftSize) / sr).toInt().coerceIn(1, maxBin)
+      val bin1 = ((f1 * fftSize) / sr).toInt().coerceIn(bin0, maxBin)
+      bandBinStart[b] = bin0
+      bandBinEnd[b] = bin1
+    }
+  }
 
-      var peakMag = 0f
+  private fun computeAndPublishSpectrum(): BotanicalAudioSpectrum {
+    val sr = sampleRateHz
+    ensureBandBinsForSampleRate(sr)
+
+    val mask = fftSize - 1
+    for (i in 0 until fftSize) {
+      val idx = (ringIndex + i) and mask
+      val rev = bitReversed[i]
+      fftReal[rev] = sampleRing[idx] * hannWindow[i]
+      fftImag[rev] = 0f
+    }
+
+    fftInPlacePresorted(fftReal, fftImag)
+
+    val bandCount = BotanicalAudioSpectrum.BAND_COUNT
+    var bassSum = 0f
+    var midSum = 0f
+    var trebleSum = 0f
+    var totalSum = 0f
+
+    for (b in 0 until bandCount) {
+      val bin0 = bandBinStart[b]
+      val bin1 = bandBinEnd[b]
+
+      var peakMagSq = 0f
       for (bin in bin0..bin1) {
-        val mag = hypot(fftReal[bin], fftImag[bin]) / (fftSize / 4f)
-        if (mag > peakMag) peakMag = mag
+        val re = fftReal[bin]
+        val im = fftImag[bin]
+        val magSq = re * re + im * im
+        if (magSq > peakMagSq) peakMagSq = magSq
       }
 
-      // Convert magnitude to perceptual normalized [0..1] energy
-      val db = 20f * ln((peakMag + 1e-5f).toDouble()).toFloat() / ln(10.0).toFloat()
+      val peakMag = sqrt(peakMagSq) / magNormDivisor
+      val db = 20f * ln(peakMag + 1e-5f) / ln10
       val normalized = ((db + 48f) / 42f).coerceIn(0f, 1f)
 
       val prev = smoothedBands[b]
       val alpha = if (normalized > prev) 0.58f else 0.24f
-      smoothedBands[b] = prev + (normalized - prev) * alpha
+      val smoothed = prev + (normalized - prev) * alpha
+      smoothedBands[b] = smoothed
+
+      totalSum += smoothed
+      when {
+        b < 3 -> bassSum += smoothed
+        b < 8 -> midSum += smoothed
+        else -> trebleSum += smoothed
+      }
     }
 
-    val bandsList = smoothedBands.toList()
-    val bass = (bandsList.take(3).average().toFloat()).coerceIn(0f, 1f)
-    val mid = (bandsList.subList(3, 8).average().toFloat()).coerceIn(0f, 1f)
-    val treble = (bandsList.subList(8, 12).average().toFloat()).coerceIn(0f, 1f)
-    val overall = (bandsList.average().toFloat()).coerceIn(0f, 1f)
+    val bass = (bassSum / 3f).coerceIn(0f, 1f)
+    val mid = (midSum / 5f).coerceIn(0f, 1f)
+    val treble = (trebleSum / 4f).coerceIn(0f, 1f)
+    val overall = (totalSum / bandCount).coerceIn(0f, 1f)
 
     val spectrum = BotanicalAudioSpectrum(
-      bands = bandsList,
+      bands = smoothedBands.toList(),
       bass = bass,
       mid = mid,
       treble = treble,
@@ -205,53 +282,29 @@ class AudioFrequencyAnalyzer {
     return spectrum
   }
 
-  private fun fftInPlace(real: FloatArray, imag: FloatArray) {
+  private fun fftInPlacePresorted(real: FloatArray, imag: FloatArray) {
     val n = real.size
-    var j = 0
-    for (i in 1 until n) {
-      var bit = n shr 1
-      while (j and bit != 0) {
-        j = j xor bit
-        bit = bit shr 1
-      }
-      j = j xor bit
-      if (i < j) {
-        val tr = real[i]
-        real[i] = real[j]
-        real[j] = tr
-        val ti = imag[i]
-        imag[i] = imag[j]
-        imag[j] = ti
-      }
-    }
-
-    var len = 2
-    while (len <= n) {
-      val halfLen = len / 2
-      val angle = -2.0 * PI / len
-      val wLenReal = cos(angle).toFloat()
-      val wLenImag = sin(angle).toFloat()
+    for (stage in 0 until log2N) {
+      val halfLen = 1 shl stage
+      val len = halfLen shl 1
+      val cosTable = stageCosTables[stage]
+      val sinTable = stageSinTables[stage]
       var i = 0
       while (i < n) {
-        var wReal = 1f
-        var wImag = 0f
         for (k in 0 until halfLen) {
           val evenIdx = i + k
           val oddIdx = evenIdx + halfLen
+          val wReal = cosTable[k]
+          val wImag = sinTable[k]
           val oddR = real[oddIdx] * wReal - imag[oddIdx] * wImag
           val oddI = real[oddIdx] * wImag + imag[oddIdx] * wReal
           real[oddIdx] = real[evenIdx] - oddR
           imag[oddIdx] = imag[evenIdx] - oddI
           real[evenIdx] = real[evenIdx] + oddR
           imag[evenIdx] = imag[evenIdx] + oddI
-
-          val nextWReal = wReal * wLenReal - wImag * wLenImag
-          wImag = wReal * wLenImag + wImag * wLenReal
-          wReal = nextWReal
         }
         i += len
       }
-      len = len shl 1
     }
   }
 }

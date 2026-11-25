@@ -1,6 +1,8 @@
 package com.example.ui.components
 
+import android.content.Context
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
@@ -31,6 +34,7 @@ import com.example.ui.theme.FloraBorderInk
 import com.example.ui.theme.FloraPaperWarm
 import com.example.ui.theme.FloraThumbShape
 import com.example.ui.theme.LocalAlbumPalette
+import com.example.ui.theme.LocalFloraColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -41,8 +45,10 @@ internal object CoverArtCache {
     .coerceIn(4 * 1024, 24 * 1024)
 
   private val lru = object : LruCache<String, ImageBitmap>(maxCacheKb) {
-    override fun sizeOf(key: String, value: ImageBitmap): Int =
-      ((value.width.toLong() * value.height.toLong() * 4L) / 1024L).toInt().coerceAtLeast(1)
+    override fun sizeOf(key: String, value: ImageBitmap): Int {
+      val bpp = if (value.config == androidx.compose.ui.graphics.ImageBitmapConfig.Rgb565) 2L else 4L
+      return ((value.width.toLong() * value.height.toLong() * bpp) / 1024L).toInt().coerceAtLeast(1)
+    }
   }
 
   fun cacheKey(coverPath: String, targetSizePx: Int): String = "$coverPath@$targetSizePx"
@@ -76,8 +82,43 @@ internal fun calculateInSampleSize(
   return inSampleSize.coerceAtLeast(1)
 }
 
-internal fun decodeSampledImageBitmap(coverPath: String, targetSizePx: Int): ImageBitmap? {
+internal fun decodeSampledImageBitmap(
+  context: Context,
+  coverPath: String,
+  targetSizePx: Int,
+): ImageBitmap? {
   return runCatching {
+    val preferRgb565 = coverPath.endsWith(".jpg", ignoreCase = true) ||
+      coverPath.endsWith(".jpeg", ignoreCase = true) ||
+      coverPath.startsWith("content://media/external/audio/albumart/")
+    val preferredConfig = if (preferRgb565) {
+      android.graphics.Bitmap.Config.RGB_565
+    } else {
+      android.graphics.Bitmap.Config.ARGB_8888
+    }
+
+    if (coverPath.startsWith("content://") || coverPath.startsWith("file://")) {
+      val uri = Uri.parse(coverPath)
+      val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      context.contentResolver.openInputStream(uri)?.use { stream ->
+        BitmapFactory.decodeStream(stream, null, boundsOpts)
+      }
+      if (boundsOpts.outWidth <= 0 || boundsOpts.outHeight <= 0) return null
+      val sampleSize = calculateInSampleSize(
+        rawWidth = boundsOpts.outWidth,
+        rawHeight = boundsOpts.outHeight,
+        reqWidth = targetSizePx,
+        reqHeight = targetSizePx,
+      )
+      val decodeOpts = BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+        inPreferredConfig = preferredConfig
+      }
+      return@runCatching context.contentResolver.openInputStream(uri)?.use { stream ->
+        BitmapFactory.decodeStream(stream, null, decodeOpts)?.asImageBitmap()
+      }
+    }
+
     val file = File(coverPath)
     if (!file.exists()) return null
 
@@ -85,6 +126,7 @@ internal fun decodeSampledImageBitmap(coverPath: String, targetSizePx: Int): Ima
       inJustDecodeBounds = true
     }
     BitmapFactory.decodeFile(coverPath, boundsOpts)
+    if (boundsOpts.outWidth <= 0 || boundsOpts.outHeight <= 0) return null
     val sampleSize = calculateInSampleSize(
       rawWidth = boundsOpts.outWidth,
       rawHeight = boundsOpts.outHeight,
@@ -93,6 +135,7 @@ internal fun decodeSampledImageBitmap(coverPath: String, targetSizePx: Int): Ima
     )
     val decodeOpts = BitmapFactory.Options().apply {
       inSampleSize = sampleSize
+      inPreferredConfig = preferredConfig
     }
     BitmapFactory.decodeFile(coverPath, decodeOpts)?.asImageBitmap()
   }.getOrNull()
@@ -104,12 +147,13 @@ fun AlbumArtFrame(
   modifier: Modifier = Modifier,
   cornerRadius: Dp = 10.dp,
   customShape: Shape? = null,
-  borderColor: Color = FloraBorderInk.copy(alpha = 0.72f),
+  borderColor: Color = LocalFloraColors.current.borderInk.copy(alpha = 0.72f),
   preferLiveBotanicalCanvas: Boolean = false,
 ) {
   val palette = LocalAlbumPalette.current
+  val colors = LocalFloraColors.current
   val coverPath = track?.coverPath
-  val isImportedCover = track != null && !track.isBundled && coverPath != null
+  val isImportedCover = track != null && coverPath != null && (coverPath.contains("custom_covers") || !track.isBundled)
 
   val shape = customShape ?: RoundedCornerShape(
     topStart = 2.dp,
@@ -121,9 +165,10 @@ fun AlbumArtFrame(
   BoxWithConstraints(
     modifier = modifier
       .clip(shape)
-      .background(FloraPaperWarm)
+      .background(colors.paperWarm)
       .border(1.dp, borderColor, shape)
   ) {
+    val context = LocalContext.current
     val density = LocalDensity.current
     val targetSizePx = remember(constraints.maxWidth, constraints.maxHeight, density) {
       val maxDim = when {
@@ -153,7 +198,7 @@ fun AlbumArtFrame(
         value = cachedBitmap
       } else if (cacheKey != null && coverPath != null) {
         value = withContext(Dispatchers.IO) {
-          CoverArtCache.get(cacheKey) ?: decodeSampledImageBitmap(coverPath, targetSizePx)?.also { decoded ->
+          CoverArtCache.get(cacheKey) ?: decodeSampledImageBitmap(context, coverPath, targetSizePx)?.also { decoded ->
             CoverArtCache.put(cacheKey, decoded)
           }
         }
@@ -199,7 +244,7 @@ fun FloraDrawablePlateImage(
   contentDescription: String,
   modifier: Modifier = Modifier,
   shape: Shape = FloraThumbShape,
-  borderColor: Color = FloraBorderInk,
+  borderColor: Color = LocalFloraColors.current.borderInk,
   contentScale: ContentScale = ContentScale.Crop,
 ) {
   Image(

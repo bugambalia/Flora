@@ -7,14 +7,27 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.data.model.AppThemeMode
 import com.example.data.model.AudioEffectsState
 import com.example.data.model.EqualizerPreset
+import com.example.data.model.RepeatModeOption
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.audioDataStore: DataStore<Preferences> by preferencesDataStore(name = "herbarium_audio_prefs")
+
+data class SavedPlaybackSession(
+  val queueTrackIds: List<Long> = emptyList(),
+  val currentIndex: Int = 0,
+  val positionMs: Long = 0L,
+  val playlistName: String? = null,
+  val shuffleEnabled: Boolean = false,
+  val repeatMode: RepeatModeOption = RepeatModeOption.OFF,
+)
 
 class AudioPreferencesRepository(private val context: Context) {
   private object Keys {
@@ -28,6 +41,17 @@ class AudioPreferencesRepository(private val context: Context) {
     val CROSSFADE_ENABLED = booleanPreferencesKey("crossfade_enabled")
     val CHAMELEON_THEME = booleanPreferencesKey("chameleon_theme")
     val PLAYER_THEME_ID = stringPreferencesKey("player_theme_id")
+    val THEME_MODE = stringPreferencesKey("app_theme_mode")
+    val MIN_SCAN_DURATION_SEC = intPreferencesKey("min_scan_duration_sec")
+
+    val SESSION_QUEUE_IDS = stringPreferencesKey("session_queue_ids")
+    val SESSION_CURRENT_INDEX = intPreferencesKey("session_current_index")
+    val SESSION_POSITION_MS = longPreferencesKey("session_position_ms")
+    val SESSION_PLAYLIST_NAME = stringPreferencesKey("session_playlist_name")
+    val SESSION_SHUFFLE = booleanPreferencesKey("session_shuffle")
+    val SESSION_REPEAT = stringPreferencesKey("session_repeat")
+    val LAST_AUTO_SCAN_MS = longPreferencesKey("last_auto_scan_ms")
+    val LAST_SCAN_THRESHOLD_SEC = intPreferencesKey("last_scan_threshold_sec")
   }
 
   val preferencesFlow: Flow<AudioEffectsState> = context.audioDataStore.data.map { prefs ->
@@ -50,7 +74,73 @@ class AudioPreferencesRepository(private val context: Context) {
       crossfadeEnabled = prefs[Keys.CROSSFADE_ENABLED] ?: true,
       chameleonThemeEnabled = prefs[Keys.CHAMELEON_THEME] ?: true,
       playerThemeId = prefs[Keys.PLAYER_THEME_ID] ?: "AUTO",
+      themeMode = AppThemeMode.fromName(prefs[Keys.THEME_MODE]),
+      minScanDurationSec = (prefs[Keys.MIN_SCAN_DURATION_SEC] ?: 90).coerceIn(0, 600),
     )
+  }
+
+  suspend fun getMinScanDurationMs(): Long {
+    val secs = context.audioDataStore.data.first()[Keys.MIN_SCAN_DURATION_SEC] ?: 90
+    return secs.coerceIn(0, 600) * 1000L
+  }
+
+  suspend fun shouldRunAutoScan(cooldownMs: Long = 6L * 3600_000L): Boolean {
+    val prefs = context.audioDataStore.data.first()
+    val lastScanMs = prefs[Keys.LAST_AUTO_SCAN_MS] ?: 0L
+    if (lastScanMs <= 0L) return true
+    val currentThreshold = (prefs[Keys.MIN_SCAN_DURATION_SEC] ?: 90).coerceIn(0, 600)
+    val lastThreshold = prefs[Keys.LAST_SCAN_THRESHOLD_SEC] ?: -1
+    if (currentThreshold != lastThreshold) return true
+    val elapsed = System.currentTimeMillis() - lastScanMs
+    return elapsed >= cooldownMs || elapsed < 0L
+  }
+
+  suspend fun recordAutoScanCompleted(minScanDurationSec: Int) {
+    context.audioDataStore.edit { prefs ->
+      prefs[Keys.LAST_AUTO_SCAN_MS] = System.currentTimeMillis()
+      prefs[Keys.LAST_SCAN_THRESHOLD_SEC] = minScanDurationSec.coerceIn(0, 600)
+    }
+  }
+
+  suspend fun loadSavedPlaybackSession(): SavedPlaybackSession {
+    val prefs = context.audioDataStore.data.first()
+    val ids = prefs[Keys.SESSION_QUEUE_IDS]
+      ?.split(",")
+      ?.mapNotNull { it.toLongOrNull() }
+      .orEmpty()
+    val repeat = runCatching {
+      RepeatModeOption.valueOf(prefs[Keys.SESSION_REPEAT] ?: RepeatModeOption.OFF.name)
+    }.getOrDefault(RepeatModeOption.OFF)
+    return SavedPlaybackSession(
+      queueTrackIds = ids,
+      currentIndex = (prefs[Keys.SESSION_CURRENT_INDEX] ?: 0).coerceAtLeast(0),
+      positionMs = (prefs[Keys.SESSION_POSITION_MS] ?: 0L).coerceAtLeast(0L),
+      playlistName = prefs[Keys.SESSION_PLAYLIST_NAME]?.takeIf { it.isNotBlank() },
+      shuffleEnabled = prefs[Keys.SESSION_SHUFFLE] ?: false,
+      repeatMode = repeat,
+    )
+  }
+
+  suspend fun savePlaybackSession(session: SavedPlaybackSession) {
+    context.audioDataStore.edit { prefs ->
+      if (session.queueTrackIds.isEmpty()) {
+        prefs.remove(Keys.SESSION_QUEUE_IDS)
+        prefs.remove(Keys.SESSION_CURRENT_INDEX)
+        prefs.remove(Keys.SESSION_POSITION_MS)
+        prefs.remove(Keys.SESSION_PLAYLIST_NAME)
+      } else {
+        prefs[Keys.SESSION_QUEUE_IDS] = session.queueTrackIds.joinToString(",")
+        prefs[Keys.SESSION_CURRENT_INDEX] = session.currentIndex.coerceAtLeast(0)
+        prefs[Keys.SESSION_POSITION_MS] = session.positionMs.coerceAtLeast(0L)
+        if (session.playlistName.isNullOrBlank()) {
+          prefs.remove(Keys.SESSION_PLAYLIST_NAME)
+        } else {
+          prefs[Keys.SESSION_PLAYLIST_NAME] = session.playlistName
+        }
+      }
+      prefs[Keys.SESSION_SHUFFLE] = session.shuffleEnabled
+      prefs[Keys.SESSION_REPEAT] = session.repeatMode.name
+    }
   }
 
   suspend fun saveEqualizerEnabled(enabled: Boolean) {
@@ -101,5 +191,13 @@ class AudioPreferencesRepository(private val context: Context) {
 
   suspend fun savePlayerThemeId(themeId: String) {
     context.audioDataStore.edit { prefs -> prefs[Keys.PLAYER_THEME_ID] = themeId }
+  }
+
+  suspend fun saveThemeMode(themeMode: AppThemeMode) {
+    context.audioDataStore.edit { prefs -> prefs[Keys.THEME_MODE] = themeMode.name }
+  }
+
+  suspend fun saveMinScanDurationSec(seconds: Int) {
+    context.audioDataStore.edit { prefs -> prefs[Keys.MIN_SCAN_DURATION_SEC] = seconds.coerceIn(0, 600) }
   }
 }

@@ -25,12 +25,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,20 +55,12 @@ import com.example.data.model.PlaylistWithTracks
 import com.example.ui.components.FloraFlowerGlyph
 import com.example.ui.components.FloraMountedPlate
 import com.example.ui.components.FloraScreenHeader
-import com.example.ui.theme.FloraBorderInk
 import com.example.ui.theme.FloraCardTopRightShape
-import com.example.ui.theme.FloraCobalt
-import com.example.ui.theme.FloraGold
 import com.example.ui.theme.FloraHeroShape
-import com.example.ui.theme.FloraHeroSub
 import com.example.ui.theme.FloraInk
-import com.example.ui.theme.FloraMetaGreen
-import com.example.ui.theme.FloraPaper
-import com.example.ui.theme.FloraPaperWarm
 import com.example.ui.theme.FloraPlayerCream
-import com.example.ui.theme.FloraQuoteInk
 import com.example.ui.theme.FloraStripShape
-import com.example.ui.theme.FloraTerracotta
+import com.example.ui.theme.LocalFloraColors
 import com.example.ui.theme.LocalThemeGradients
 import com.example.ui.viewmodel.HerbariumUiState
 
@@ -78,7 +73,9 @@ fun FloracionScreen(
   onOpenExplore: () -> Unit,
   onOpenHerbarium: () -> Unit,
   modifier: Modifier = Modifier,
+  onOpenSettings: () -> Unit = {},
 ) {
+  val colors = LocalFloraColors.current
   val themeGradients = LocalThemeGradients.current
   val ecosystems = uiState.playlists.take(3)
   val featuredSpecies = BotanicalCatalog.getById(
@@ -95,7 +92,21 @@ fun FloracionScreen(
         title = "Floración",
         sealText = "M",
         onSealClick = onOpenHerbarium,
-        sealContentDescription = "Herbario"
+        sealContentDescription = "Herbario",
+        trailingExtra = {
+          IconButton(
+            onClick = onOpenSettings,
+            modifier = Modifier
+              .minimumInteractiveComponentSize()
+              .testTag("open_settings_button")
+          ) {
+            Icon(
+              Icons.Filled.Settings,
+              contentDescription = "Ajustes",
+              tint = colors.ink
+            )
+          }
+        }
       )
     }
 
@@ -103,8 +114,9 @@ fun FloracionScreen(
     item {
       FloraMountedPlate(
         shape = FloraHeroShape,
-        containerColor = FloraPaper,
-        borderColor = FloraBorderInk,
+        containerColor = colors.paper,
+        borderColor = colors.borderInk,
+        shadowColor = colors.shadowPaper,
         goldHairline = true,
         shadowOffsetX = 5.dp,
         shadowOffsetY = 6.dp,
@@ -134,7 +146,7 @@ fun FloracionScreen(
                 .weight(0.45f)
                 .height(198.dp)
                 .clip(FloraCardTopRightShape)
-                .border(1.dp, FloraBorderInk, FloraCardTopRightShape)
+                .border(1.dp, colors.borderInk, FloraCardTopRightShape)
             ) {
               Image(
                 painter = painterResource(id = R.drawable.flora_poppies_cobalt),
@@ -161,7 +173,7 @@ fun FloracionScreen(
                     modifier = Modifier
                       .size(6.dp)
                       .clip(CircleShape)
-                      .background(FloraGold)
+                      .background(colors.gold)
                   )
                   Text(
                     text = featuredSpecies.scientificName.substringBefore(" ("),
@@ -188,18 +200,18 @@ fun FloracionScreen(
                 Text(
                   text = "LÁMINA DEL DÍA",
                   style = MaterialTheme.typography.labelMedium,
-                  color = FloraTerracotta,
+                  color = colors.terracotta,
                   maxLines = 1
                 )
                 Surface(
                   shape = RoundedCornerShape(4.dp),
                   color = Color.Transparent,
-                  border = BorderStroke(1.dp, FloraTerracotta.copy(alpha = 0.65f))
+                  border = BorderStroke(1.dp, colors.terracotta.copy(alpha = 0.65f))
                 ) {
                   Text(
                     text = "FL",
                     style = MaterialTheme.typography.labelSmall,
-                    color = FloraTerracotta,
+                    color = colors.terracotta,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                   )
                 }
@@ -208,13 +220,13 @@ fun FloracionScreen(
               Text(
                 text = "Flores que también cantan",
                 style = MaterialTheme.typography.headlineLarge,
-                color = FloraInk
+                color = colors.ink
               )
 
               Text(
                 text = "Paisajes sonoros de flora endémica.",
                 style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
-                color = FloraHeroSub
+                color = colors.heroSub
               )
 
               Spacer(modifier = Modifier.height(4.dp))
@@ -223,7 +235,7 @@ fun FloracionScreen(
                 onClick = onPlayHero,
                 shape = RoundedCornerShape(topStart = 2.dp, topEnd = 14.dp, bottomEnd = 2.dp, bottomStart = 14.dp),
                 colors = ButtonDefaults.buttonColors(
-                  containerColor = FloraCobalt,
+                  containerColor = colors.cobalt,
                   contentColor = FloraPlayerCream
                 ),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
@@ -259,9 +271,9 @@ fun FloracionScreen(
           Text(
             text = "Ecosistemas",
             style = MaterialTheme.typography.headlineMedium,
-            color = FloraInk
+            color = colors.ink
           )
-          FloraFlowerGlyph(modifier = Modifier.size(18.dp), color = FloraTerracotta)
+          FloraFlowerGlyph(modifier = Modifier.size(18.dp), color = colors.terracotta)
         }
         Row(
           modifier = Modifier
@@ -273,12 +285,12 @@ fun FloracionScreen(
           Text(
             text = "VER TODO",
             style = MaterialTheme.typography.labelMedium,
-            color = FloraTerracotta
+            color = colors.terracotta
           )
           Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = "Ver todo",
-            tint = FloraTerracotta,
+            tint = colors.terracotta,
             modifier = Modifier.size(16.dp)
           )
         }
@@ -288,7 +300,7 @@ fun FloracionScreen(
     // 3 Ecosystem Cards Row
     if (ecosystems.isNotEmpty()) {
       item {
-        val accents = listOf(FloraTerracotta, FloraCobalt, FloraGold)
+        val accents = listOf(colors.terracotta, colors.cobalt, colors.gold)
         val drawables = listOf(
           R.drawable.flora_protea_rainforest,
           R.drawable.flora_cattleya_mosaic,
@@ -343,14 +355,14 @@ fun FloracionScreen(
               Text(
                 text = pl.playlist.name,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = FloraInk,
+                color = colors.ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
               )
               Text(
                 text = "${pl.tracks.size} canciones",
                 style = MaterialTheme.typography.bodySmall,
-                color = FloraMetaGreen
+                color = colors.metaGreen
               )
             }
           }
@@ -362,8 +374,8 @@ fun FloracionScreen(
     item {
       FloraMountedPlate(
         shape = FloraStripShape,
-        containerColor = FloraPaperWarm,
-        borderColor = FloraBorderInk.copy(alpha = 0.45f),
+        containerColor = colors.paperWarm,
+        borderColor = colors.borderInk.copy(alpha = 0.45f),
         shadowOffsetX = 0.dp,
         shadowOffsetY = 0.dp,
         modifier = Modifier.fillMaxWidth()
@@ -382,23 +394,23 @@ fun FloracionScreen(
             Text(
               text = "NOTA DE HERBARIO",
               style = MaterialTheme.typography.labelMedium,
-              color = FloraTerracotta
+              color = colors.terracotta
             )
             Text(
               text = "“Del azul mosaico de los Andes al oro de la selva húmeda.”",
               style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic, fontSize = 14.sp),
-              color = FloraQuoteInk
+              color = colors.quoteInk
             )
           }
           Spacer(modifier = Modifier.width(10.dp))
           Surface(
             shape = RoundedCornerShape(4.dp),
             color = Color.Transparent,
-            border = BorderStroke(1.dp, FloraTerracotta.copy(alpha = 0.55f)),
+            border = BorderStroke(1.dp, colors.terracotta.copy(alpha = 0.55f)),
             modifier = Modifier.size(28.dp)
           ) {
             Box(contentAlignment = Alignment.Center) {
-              FloraFlowerGlyph(modifier = Modifier.size(14.dp), color = FloraTerracotta)
+              FloraFlowerGlyph(modifier = Modifier.size(14.dp), color = colors.terracotta)
             }
           }
         }

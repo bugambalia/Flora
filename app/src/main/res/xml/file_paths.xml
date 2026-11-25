@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="botanical_audio" path="botanical_audio/" />
+    <files-path name="imported_covers" path="imported_covers/" />
+    <files-path name="custom_covers" path="custom_covers/" />
+    <external-files-path name="ext_music" path="Music/" />
+    <cache-path name="cache" path="." />
+</paths>

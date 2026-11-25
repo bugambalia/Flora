@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     PlaylistTrackCrossRef::class,
     BotanicalProgressEntity::class,
   ],
-  version = 2,
+  version = 3,
   exportSchema = false,
 )
 abstract class BotanicalAudioDatabase : RoomDatabase() {
@@ -31,6 +31,12 @@ abstract class BotanicalAudioDatabase : RoomDatabase() {
       }
     }
 
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN lyrics TEXT")
+      }
+    }
+
     fun getInstance(context: Context): BotanicalAudioDatabase {
       return INSTANCE ?: synchronized(this) {
         INSTANCE ?: Room.databaseBuilder(
@@ -38,7 +44,7 @@ abstract class BotanicalAudioDatabase : RoomDatabase() {
           BotanicalAudioDatabase::class.java,
           "herbarium_audio.db"
         )
-          .addMigrations(MIGRATION_1_2)
+          .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
           .fallbackToDestructiveMigration(dropAllTables = true)
           .build()
           .also { INSTANCE = it }

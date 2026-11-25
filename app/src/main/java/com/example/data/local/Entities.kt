@@ -33,6 +33,7 @@ data class TrackEntity(
   val sourceFolder: String = "Herbario",
   val sourcePath: String = "herbarium://bundled",
   val dateAdded: Long = System.currentTimeMillis(),
+  val lyrics: String? = null,
 ) {
   fun toDomain(): AudioTrack = AudioTrack(
     id = id,
@@ -52,6 +53,8 @@ data class TrackEntity(
     isBundled = isBundled,
     sourceFolder = sourceFolder,
     sourcePath = sourcePath,
+    dateAdded = dateAdded,
+    lyrics = lyrics,
   )
 }
 

@@ -40,6 +40,31 @@ interface BotanicalAudioDao {
   @Query("UPDATE tracks SET playCount = playCount + 1 WHERE id = :trackId")
   suspend fun incrementPlayCount(trackId: Long)
 
+  @Query(
+    """
+    UPDATE tracks
+    SET title = :title,
+        artist = :artist,
+        album = :album,
+        genre = :genre,
+        speciesId = :speciesId,
+        coverPath = :coverPath
+    WHERE id = :trackId
+    """
+  )
+  suspend fun updateTrackMetadata(
+    trackId: Long,
+    title: String,
+    artist: String,
+    album: String,
+    genre: String,
+    speciesId: String,
+    coverPath: String?,
+  )
+
+  @Query("UPDATE tracks SET lyrics = :lyrics WHERE id = :trackId")
+  suspend fun updateTrackLyrics(trackId: Long, lyrics: String?)
+
   @Query("DELETE FROM tracks WHERE id = :trackId")
   suspend fun deleteTrack(trackId: Long)
 

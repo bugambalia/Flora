@@ -65,7 +65,7 @@ fun BotanicalFrequencyVisualizer(
   val palette = LocalAlbumPalette.current
   val infiniteTransition = rememberInfiniteTransition(label = "botanicalVisualizerDrift")
 
-  val driftAngleDeg by infiniteTransition.animateFloat(
+  val driftAngleDegState = infiniteTransition.animateFloat(
     initialValue = 0f,
     targetValue = 360f,
     animationSpec = infiniteRepeatable(
@@ -75,7 +75,7 @@ fun BotanicalFrequencyVisualizer(
     label = "visualizerDrift"
   )
 
-  val idleBreath by infiniteTransition.animateFloat(
+  val idleBreathState = infiniteTransition.animateFloat(
     initialValue = 0f,
     targetValue = 1f,
     animationSpec = infiniteRepeatable(
@@ -86,28 +86,25 @@ fun BotanicalFrequencyVisualizer(
   )
 
   val bandCount = BotanicalAudioSpectrum.BAND_COUNT
-  val animatedBands = List(bandCount) { idx ->
+  val animatedBandStates = List(bandCount) { idx ->
     val raw = if (isPlaying) {
-      val bandVal = spectrum.bands.getOrElse(idx) { 0f }
-      // Combine live PCM FFT energy with subtle breath floor when audio starts
-      (bandVal.coerceIn(0f, 1f) + if (!spectrum.isActive) 0.08f * idleBreath else 0f).coerceIn(0f, 1f)
+      spectrum.bands.getOrElse(idx) { 0f }.coerceIn(0f, 1f)
     } else {
-      0.04f + 0.03f * idleBreath
+      0.04f
     }
-    val anim by animateFloatAsState(
+    animateFloatAsState(
       targetValue = raw,
       animationSpec = tween(durationMillis = 85),
       label = "band_$idx"
     )
-    anim
   }
 
-  val animatedBass by animateFloatAsState(
+  val animatedBassState = animateFloatAsState(
     targetValue = if (isPlaying) spectrum.bass else 0.04f,
     animationSpec = tween(durationMillis = 90),
     label = "bassEnergy"
   )
-  val animatedTreble by animateFloatAsState(
+  val animatedTrebleState = animateFloatAsState(
     targetValue = if (isPlaying) spectrum.treble else 0.03f,
     animationSpec = tween(durationMillis = 90),
     label = "trebleEnergy"
@@ -120,7 +117,6 @@ fun BotanicalFrequencyVisualizer(
   val leafHighlightColor = lerp(FloraGoldSoft, palette.lightVibrant, 0.45f)
   val petalPrimaryColor = lerp(palette.vibrant, FloraGoldSoft, 0.30f)
   val petalSecondaryColor = lerp(palette.lightVibrant, FloraPlayerCream, 0.35f)
-  val rotationOffset = if (isPlaying) driftAngleDeg else 0f
 
   val t = dissolveProgress.coerceIn(0f, 1f)
   // Wither peaks during [0.0 .. 0.50] as outgoing artwork dissolves
@@ -143,6 +139,16 @@ fun BotanicalFrequencyVisualizer(
       }
       .testTag("botanical_audio_visualizer")
   ) {
+    val idleBreath = idleBreathState.value
+    val rotationOffset = if (isPlaying) driftAngleDegState.value else 0f
+    val animatedBass = animatedBassState.value
+    val animatedTreble = animatedTrebleState.value
+    val breathFloor = when {
+      !isPlaying -> 0.03f * idleBreath
+      !spectrum.isActive -> 0.08f * idleBreath
+      else -> 0f
+    }
+
     val cx = size.width / 2f
     val cy = size.height / 2f
     val maxR = size.minDimension / 2f
@@ -160,7 +166,7 @@ fun BotanicalFrequencyVisualizer(
 
     // 1. Outer Botanical Foliage Ring: 12 organic curved leaves pulsing with frequency bands
     for (i in 0 until bandCount) {
-      val bandEnergy = animatedBands[i]
+      val bandEnergy = (animatedBandStates[i].value + breathFloor).coerceIn(0f, 1f)
       val baseAngleDeg = (i * (360f / bandCount)) + rotationOffset + droopTwistDeg * (if (i % 2 == 0) 1f else -1f)
       val swayDeg = sin((idleBreath * PI + i * 0.85)).toFloat() * (2.5f + bandEnergy * 6.5f)
       val angleRad = ((baseAngleDeg + swayDeg) * PI / 180.0).toFloat()
@@ -196,7 +202,9 @@ fun BotanicalFrequencyVisualizer(
     // 2. Inner Botanical Petal Corolla: 12 offset petals blooming and withering between tracks
     val petalStepDeg = 360f / bandCount
     for (i in 0 until bandCount) {
-      val pairedBand = (animatedBands[i] * 0.6f + animatedBands[(i + 1) % bandCount] * 0.4f).coerceIn(0f, 1f)
+      val bCurr = (animatedBandStates[i].value + breathFloor).coerceIn(0f, 1f)
+      val bNext = (animatedBandStates[(i + 1) % bandCount].value + breathFloor).coerceIn(0f, 1f)
+      val pairedBand = (bCurr * 0.6f + bNext * 0.4f).coerceIn(0f, 1f)
       val petalAngleDeg = (i * petalStepDeg) + (petalStepDeg * 0.5f) + rotationOffset * 0.85f - droopTwistDeg * 0.7f
       val petalAngleRad = (petalAngleDeg * PI / 180.0).toFloat()
 
@@ -230,7 +238,7 @@ fun BotanicalFrequencyVisualizer(
     // 3. Slender Botanical Stamens & Pollen Anthers shimmering with treble + bloom burst
     val stamenCount = bandCount * 2
     for (s in 0 until stamenCount) {
-      val bandEnergy = animatedBands[s % bandCount]
+      val bandEnergy = (animatedBandStates[s % bandCount].value + breathFloor).coerceIn(0f, 1f)
       val shimmer = (bandEnergy * 0.65f + animatedTreble * 0.35f + bloomFactor * 0.32f - witherFactor * 0.20f)
         .coerceIn(0f, 1f)
       val angleDeg = (s * (360f / stamenCount)) + (360f / (stamenCount * 2f)) + rotationOffset * 1.1f

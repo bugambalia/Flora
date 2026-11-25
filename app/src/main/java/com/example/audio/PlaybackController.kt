@@ -3,13 +3,17 @@ package com.example.audio
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.example.data.model.AudioTrack
+import com.example.data.model.BotanicalCatalog
 import com.example.data.model.PlaybackState
 import com.example.data.model.RepeatModeOption
 import com.google.common.util.concurrent.ListenableFuture
@@ -48,6 +52,9 @@ class PlaybackController(private val context: Context) {
   private val _trackTransitionEvents = MutableSharedFlow<AudioTrack>(extraBufferCapacity = 8)
   val trackTransitionEvents: SharedFlow<AudioTrack> = _trackTransitionEvents.asSharedFlow()
 
+  private val _playbackErrors = MutableSharedFlow<String>(extraBufferCapacity = 8)
+  val playbackErrors: SharedFlow<String> = _playbackErrors.asSharedFlow()
+
   private var pendingSpeed: Float = 1.0f
   private var pendingGapless: Boolean = true
   private var pendingCrossfade: Boolean = true
@@ -56,6 +63,7 @@ class PlaybackController(private val context: Context) {
   private var pendingBass: Int = 240
   private var pendingVirtualizer: Int = 180
   private var lastAutoCrossfadeTrackId: Long? = null
+  private var pendingRestoredStartPositionMs: Long? = null
 
   fun connect() {
     if (controllerFuture != null) return
@@ -68,7 +76,22 @@ class PlaybackController(private val context: Context) {
         mediaController = controller
         attachListener(controller)
         applyPendingAudioSettings(controller)
-        syncStateFromPlayer(controller)
+        val restoredQueue = _playbackState.value.queue
+        if (controller.mediaItemCount == 0 && restoredQueue.isNotEmpty()) {
+          val safeIdx = _playbackState.value.currentIndex.coerceIn(0, restoredQueue.lastIndex)
+          val startPos = pendingRestoredStartPositionMs ?: _positionMsFlow.value
+          controller.shuffleModeEnabled = _playbackState.value.shuffleEnabled
+          controller.repeatMode = when (_playbackState.value.repeatMode) {
+            RepeatModeOption.OFF -> Player.REPEAT_MODE_OFF
+            RepeatModeOption.ALL -> Player.REPEAT_MODE_ALL
+            RepeatModeOption.ONE -> Player.REPEAT_MODE_ONE
+          }
+          controller.setMediaItems(restoredQueue.map { it.toMediaItem() }, safeIdx, startPos)
+          controller.prepare()
+          pendingRestoredStartPositionMs = null
+        } else {
+          syncStateFromPlayer(controller)
+        }
       }
     }, ContextCompat.getMainExecutor(context))
   }
@@ -83,7 +106,12 @@ class PlaybackController(private val context: Context) {
   private fun attachListener(controller: MediaController) {
     controller.addListener(object : Player.Listener {
       override fun onIsPlayingChanged(isPlaying: Boolean) {
-        _playbackState.update { it.copy(isPlaying = isPlaying) }
+        _playbackState.update {
+          it.copy(
+            isPlaying = isPlaying,
+            errorMessage = if (isPlaying) null else it.errorMessage,
+          )
+        }
         if (isPlaying) startProgressLoop() else stopProgressLoop()
       }
 
@@ -98,7 +126,8 @@ class PlaybackController(private val context: Context) {
             currentTrack = track,
             positionMs = 0L,
             durationMs = controller.duration.takeIf { d -> d > 0 } ?: track?.durationMs ?: 0L,
-            gaplessTransitionsCount = if (wasGapless) it.gaplessTransitionsCount + 1 else it.gaplessTransitionsCount
+            gaplessTransitionsCount = if (wasGapless) it.gaplessTransitionsCount + 1 else it.gaplessTransitionsCount,
+            errorMessage = null,
           )
         }
         if (track != null) {
@@ -108,6 +137,32 @@ class PlaybackController(private val context: Context) {
 
       override fun onPlaybackStateChanged(playbackState: Int) {
         syncStateFromPlayer(controller)
+      }
+
+      override fun onPlayerError(error: PlaybackException) {
+        val trackName = _playbackState.value.currentTrack?.title ?: "la pista"
+        val msg = when (error.errorCode) {
+          PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
+            "No se encontró el archivo de «$trackName»."
+          PlaybackException.ERROR_CODE_IO_NO_PERMISSION ->
+            "Permiso revocado para reproducir «$trackName». Vuelve a seleccionar la carpeta."
+          PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+          PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+          PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+          PlaybackException.ERROR_CODE_DECODING_FAILED ->
+            "Formato no compatible o archivo dañado en «$trackName»."
+          else ->
+            "No se pudo reproducir «$trackName» (${error.errorCodeName})."
+        }
+        stopProgressLoop()
+        _playbackState.update {
+          it.copy(
+            isPlaying = false,
+            isBuffering = false,
+            errorMessage = msg,
+          )
+        }
+        _playbackErrors.tryEmit(msg)
       }
 
       override fun onRepeatModeChanged(repeatMode: Int) {
@@ -132,14 +187,18 @@ class PlaybackController(private val context: Context) {
     val idx = controller.currentMediaItemIndex
     val track = _playbackState.value.queue.getOrNull(idx)
     val pos = controller.currentPosition.coerceAtLeast(0L)
-    _positionMsFlow.value = pos
+    val buffering = controller.playbackState == Player.STATE_BUFFERING
+    if (_playbackState.value.queue.isNotEmpty() || controller.mediaItemCount > 0) {
+      _positionMsFlow.value = pos
+    }
     _playbackState.update {
       it.copy(
-        currentIndex = idx,
+        currentIndex = if (idx >= 0) idx else it.currentIndex,
         currentTrack = track ?: it.currentTrack,
         isPlaying = controller.isPlaying,
+        isBuffering = buffering,
         durationMs = controller.duration.takeIf { d -> d > 0 } ?: track?.durationMs ?: it.durationMs,
-        bufferedPercentage = controller.bufferedPercentage,
+        bufferedPercentage = controller.bufferedPercentage.coerceIn(0, 100),
       )
     }
     if (controller.isPlaying) startProgressLoop() else stopProgressLoop()
@@ -155,8 +214,14 @@ class PlaybackController(private val context: Context) {
             val state = _playbackState.value
             val dur = c.duration.takeIf { d -> d > 0 } ?: state.currentTrack?.durationMs ?: 0L
             _positionMsFlow.value = pos
-            if (dur > 0L && dur != state.durationMs) {
-              _playbackState.update { it.copy(durationMs = dur) }
+            val bufPct = c.bufferedPercentage.coerceIn(0, 100)
+            if ((dur > 0L && dur != state.durationMs) || bufPct != state.bufferedPercentage) {
+              _playbackState.update {
+                it.copy(
+                  durationMs = if (dur > 0L) dur else it.durationMs,
+                  bufferedPercentage = bufPct,
+                )
+              }
             }
             val currentId = state.currentTrack?.id
             val remaining = dur - pos
@@ -169,7 +234,7 @@ class PlaybackController(private val context: Context) {
               currentId != lastAutoCrossfadeTrackId
             ) {
               lastAutoCrossfadeTrackId = currentId
-              BotanicalPlaybackService.armCrossfade(CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS)
+              armCrossfadeOnSession(c)
               c.seekToNextMediaItem()
             }
           }
@@ -184,15 +249,91 @@ class PlaybackController(private val context: Context) {
     progressJob = null
   }
 
+  fun clearErrorMessage() {
+    _playbackState.update { it.copy(errorMessage = null) }
+  }
+
+  fun prepareRestoredSession(
+    tracks: List<AudioTrack>,
+    startIndex: Int,
+    positionMs: Long,
+    playlistName: String?,
+    shuffleEnabled: Boolean,
+    repeatMode: RepeatModeOption,
+  ) {
+    if (tracks.isEmpty()) return
+    val safeIndex = startIndex.coerceIn(0, tracks.lastIndex)
+    val selected = tracks[safeIndex]
+    val clampedPos = positionMs.coerceIn(0L, selected.durationMs.coerceAtLeast(1L))
+    pendingRestoredStartPositionMs = clampedPos
+    _positionMsFlow.value = clampedPos
+    _playbackState.update {
+      it.copy(
+        queue = tracks,
+        currentIndex = safeIndex,
+        currentTrack = selected,
+        activePlaylistName = playlistName,
+        positionMs = clampedPos,
+        durationMs = selected.durationMs,
+        shuffleEnabled = shuffleEnabled,
+        repeatMode = repeatMode,
+        isPlaying = false,
+        isBuffering = false,
+        errorMessage = null,
+      )
+    }
+
+    val controller = mediaController
+    if (controller != null && controller.mediaItemCount == 0 && !controller.isPlaying) {
+      controller.shuffleModeEnabled = shuffleEnabled
+      controller.repeatMode = when (repeatMode) {
+        RepeatModeOption.OFF -> Player.REPEAT_MODE_OFF
+        RepeatModeOption.ALL -> Player.REPEAT_MODE_ALL
+        RepeatModeOption.ONE -> Player.REPEAT_MODE_ONE
+      }
+      controller.setMediaItems(tracks.map { it.toMediaItem() }, safeIndex, clampedPos)
+      controller.prepare()
+      pendingRestoredStartPositionMs = null
+    }
+  }
+
+  fun syncTracksUpdated(latestTracks: List<AudioTrack>) {
+    val byId = latestTracks.associateBy { it.id }
+    val state = _playbackState.value
+    if (state.queue.isEmpty()) return
+    val updatedQueue = state.queue.mapNotNull { byId[it.id] }
+    if (updatedQueue == state.queue) return
+    if (updatedQueue.isEmpty()) {
+      mediaController?.stop()
+      mediaController?.clearMediaItems()
+      _positionMsFlow.value = 0L
+      _playbackState.update { PlaybackState() }
+      return
+    }
+    val currentId = state.currentTrack?.id
+    val newIdx = updatedQueue.indexOfFirst { it.id == currentId }
+      .takeIf { it >= 0 }
+      ?: state.currentIndex.coerceIn(0, updatedQueue.lastIndex)
+    _playbackState.update {
+      it.copy(
+        queue = updatedQueue,
+        currentIndex = newIdx,
+        currentTrack = updatedQueue.getOrNull(newIdx),
+      )
+    }
+  }
+
   fun playQueue(tracks: List<AudioTrack>, startIndex: Int = 0, playlistName: String? = null) {
     if (tracks.isEmpty()) return
     val safeIndex = startIndex.coerceIn(0, tracks.lastIndex)
     val mediaItems = tracks.map { it.toMediaItem() }
     val selected = tracks[safeIndex]
     lastAutoCrossfadeTrackId = null
+    pendingRestoredStartPositionMs = null
 
-    if (pendingCrossfade && mediaController?.isPlaying == true) {
-      BotanicalPlaybackService.armCrossfade(CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS)
+    val controller = mediaController
+    if (pendingCrossfade && controller?.isPlaying == true) {
+      armCrossfadeOnSession(controller)
     }
 
     _positionMsFlow.value = 0L
@@ -204,11 +345,11 @@ class PlaybackController(private val context: Context) {
         activePlaylistName = playlistName,
         positionMs = 0L,
         durationMs = selected.durationMs,
+        errorMessage = null,
       )
     }
     _trackTransitionEvents.tryEmit(selected)
 
-    val controller = mediaController
     if (controller != null) {
       controller.setMediaItems(mediaItems, safeIndex, 0L)
       controller.prepare()
@@ -281,12 +422,13 @@ class PlaybackController(private val context: Context) {
 
   fun jumpToQueueIndex(index: Int) {
     val track = _playbackState.value.queue.getOrNull(index) ?: return
-    if (pendingCrossfade && mediaController?.isPlaying == true) {
-      BotanicalPlaybackService.armCrossfade(CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS)
+    val controller = mediaController
+    if (pendingCrossfade && controller?.isPlaying == true) {
+      armCrossfadeOnSession(controller)
     }
     _positionMsFlow.value = 0L
     _playbackState.update { it.copy(currentIndex = index, currentTrack = track, positionMs = 0L) }
-    mediaController?.let { c ->
+    controller?.let { c ->
       c.seekToDefaultPosition(index)
       c.play()
     }
@@ -314,7 +456,7 @@ class PlaybackController(private val context: Context) {
   fun next() {
     mediaController?.let { c ->
       if (pendingCrossfade && c.isPlaying) {
-        BotanicalPlaybackService.armCrossfade(CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS)
+        armCrossfadeOnSession(c)
       }
       if (c.hasNextMediaItem()) {
         c.seekToNextMediaItem()
@@ -332,7 +474,7 @@ class PlaybackController(private val context: Context) {
         c.seekTo(0L)
       } else if (c.hasPreviousMediaItem()) {
         if (pendingCrossfade && c.isPlaying) {
-          BotanicalPlaybackService.armCrossfade(CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS)
+          armCrossfadeOnSession(c)
         }
         c.seekToPreviousMediaItem()
         c.play()
@@ -369,32 +511,44 @@ class PlaybackController(private val context: Context) {
 
   fun setGaplessEnabled(enabled: Boolean) {
     pendingGapless = enabled
-    BotanicalPlaybackService.setGaplessPlayback(enabled)
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_GAPLESS) {
+      putBoolean(BotanicalPlaybackService.EXTRA_ENABLED, enabled)
+    }
   }
 
   fun setCrossfadeEnabled(enabled: Boolean) {
     pendingCrossfade = enabled
-    BotanicalPlaybackService.setCrossfadeEnabled(enabled)
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_CROSSFADE) {
+      putBoolean(BotanicalPlaybackService.EXTRA_ENABLED, enabled)
+    }
   }
 
   fun setEqualizerEnabled(enabled: Boolean) {
     pendingEqEnabled = enabled
-    BotanicalPlaybackService.activeEffectsBridge?.setEqualizerEnabled(enabled)
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_EQ_ENABLED) {
+      putBoolean(BotanicalPlaybackService.EXTRA_ENABLED, enabled)
+    }
   }
 
   fun applyEqualizerBands(bandsMb: List<Int>) {
     pendingBands = bandsMb
-    BotanicalPlaybackService.activeEffectsBridge?.applyBands(bandsMb)
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_EQ_BANDS) {
+      putIntArray(BotanicalPlaybackService.EXTRA_BANDS, bandsMb.toIntArray())
+    }
   }
 
   fun applyBassBoost(strength: Int) {
     pendingBass = strength
-    BotanicalPlaybackService.activeEffectsBridge?.applyBassBoost(strength)
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_BASS_BOOST) {
+      putInt(BotanicalPlaybackService.EXTRA_STRENGTH, strength)
+    }
   }
 
   fun applyVirtualizer(strength: Int) {
     pendingVirtualizer = strength
-    BotanicalPlaybackService.activeEffectsBridge?.applyVirtualizer(strength)
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_VIRTUALIZER) {
+      putInt(BotanicalPlaybackService.EXTRA_STRENGTH, strength)
+    }
   }
 
   fun setSleepTimer(minutes: Int?) {
@@ -417,20 +571,64 @@ class PlaybackController(private val context: Context) {
     }
   }
 
+  private fun armCrossfadeOnSession(
+    controller: MediaController,
+    durationMs: Long = CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS,
+  ) {
+    sendCommand(BotanicalPlaybackService.COMMAND_ARM_CROSSFADE, controller) {
+      putLong(BotanicalPlaybackService.EXTRA_DURATION_MS, durationMs)
+    }
+  }
+
+  private inline fun sendCommand(
+    action: String,
+    targetController: MediaController? = mediaController,
+    fillArgs: Bundle.() -> Unit,
+  ) {
+    val controller = targetController ?: return
+    val args = Bundle().apply(fillArgs)
+    runCatching {
+      controller.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), args)
+    }
+  }
+
   private fun applyPendingAudioSettings(controller: MediaController) {
     controller.setPlaybackSpeed(pendingSpeed)
-    BotanicalPlaybackService.setGaplessPlayback(pendingGapless)
-    BotanicalPlaybackService.setCrossfadeEnabled(pendingCrossfade)
-    BotanicalPlaybackService.activeEffectsBridge?.setEqualizerEnabled(pendingEqEnabled)
-    BotanicalPlaybackService.activeEffectsBridge?.applyBands(pendingBands)
-    BotanicalPlaybackService.activeEffectsBridge?.applyBassBoost(pendingBass)
-    BotanicalPlaybackService.activeEffectsBridge?.applyVirtualizer(pendingVirtualizer)
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_GAPLESS, controller) {
+      putBoolean(BotanicalPlaybackService.EXTRA_ENABLED, pendingGapless)
+    }
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_CROSSFADE, controller) {
+      putBoolean(BotanicalPlaybackService.EXTRA_ENABLED, pendingCrossfade)
+    }
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_EQ_ENABLED, controller) {
+      putBoolean(BotanicalPlaybackService.EXTRA_ENABLED, pendingEqEnabled)
+    }
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_EQ_BANDS, controller) {
+      putIntArray(BotanicalPlaybackService.EXTRA_BANDS, pendingBands.toIntArray())
+    }
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_BASS_BOOST, controller) {
+      putInt(BotanicalPlaybackService.EXTRA_STRENGTH, pendingBass)
+    }
+    sendCommand(BotanicalPlaybackService.COMMAND_SET_VIRTUALIZER, controller) {
+      putInt(BotanicalPlaybackService.EXTRA_STRENGTH, pendingVirtualizer)
+    }
   }
 
   private fun AudioTrack.toMediaItem(): MediaItem {
-    val artworkUri = coverPath?.let { path ->
-      val f = File(path)
-      if (f.exists()) Uri.fromFile(f) else null
+    val artworkUri = when {
+      !coverPath.isNullOrBlank() -> {
+        if (coverPath.startsWith("content://") || coverPath.startsWith("file://")) {
+          Uri.parse(coverPath)
+        } else {
+          val f = File(coverPath)
+          if (f.exists()) Uri.fromFile(f) else null
+        }
+      }
+      isBundled -> {
+        val species = BotanicalCatalog.getById(speciesId)
+        Uri.parse("android.resource://${context.packageName}/${species.coverResId}")
+      }
+      else -> null
     }
     val metadata = MediaMetadata.Builder()
       .setTitle(title)

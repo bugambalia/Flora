@@ -1,18 +1,7 @@
 package com.example.audio
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.RadialGradient
-import android.graphics.Shader
-import android.graphics.Typeface
 import com.example.data.local.TrackEntity
-import com.example.data.model.BotanicalCatalog
-import com.example.data.model.BotanicalSpecies
 import com.example.data.model.BotanicalSpeciesId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -23,7 +12,6 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.sin
 
@@ -136,7 +124,6 @@ object BotanicalAudioSynthesizer {
   suspend fun ensureSeedTracksGenerated(context: Context): List<TrackEntity> =
     withContext(Dispatchers.Default) {
       val audioDir = File(context.filesDir, "botanical_audio").apply { mkdirs() }
-      val coverDir = File(context.filesDir, "botanical_covers").apply { mkdirs() }
 
       coroutineScope {
         seeds.map { seed ->
@@ -145,12 +132,8 @@ object BotanicalAudioSynthesizer {
             if (!audioFile.exists() || audioFile.length() < 4096L) {
               writeWavFile(audioFile, seed)
             }
-            val coverFile = File(coverDir, "${seed.speciesId.id}_flora.jpg")
-            if (!coverFile.exists() || coverFile.length() < 1024L) {
-              val species = BotanicalCatalog.getById(seed.speciesId)
-              saveDrawableAsCoverFile(context, coverFile, species)
-            }
 
+            // Bundled tracks render artwork directly from drawable resources (no redundant disk JPEGs)
             TrackEntity(
               uri = audioFile.toURI().toString(),
               title = seed.title,
@@ -161,7 +144,7 @@ object BotanicalAudioSynthesizer {
               bitrateKbps = 705,
               sampleRateHz = 44100,
               codec = "PCM WAV",
-              coverPath = coverFile.absolutePath,
+              coverPath = null,
               speciesId = seed.speciesId.id,
               isBundled = true,
               sourceFolder = "Herbario",
@@ -266,156 +249,5 @@ object BotanicalAudioSynthesizer {
   private fun writeShortLE(out: BufferedOutputStream, value: Int) {
     out.write(value and 0xFF)
     out.write((value ushr 8) and 0xFF)
-  }
-
-  private fun saveDrawableAsCoverFile(context: Context, file: File, species: BotanicalSpecies) {
-    val decoded = BitmapFactory.decodeResource(context.resources, species.coverResId)
-    if (decoded != null) {
-      val scaled = Bitmap.createScaledBitmap(decoded, 420, 420, true)
-      FileOutputStream(file).use { out ->
-        scaled.compress(Bitmap.CompressFormat.JPEG, 90, out)
-      }
-      if (scaled !== decoded) scaled.recycle()
-      decoded.recycle()
-      return
-    }
-    generateBotanicalCoverBitmap(file, species, species.commonName)
-  }
-
-  private fun generateBotanicalCoverBitmap(file: File, species: BotanicalSpecies, title: String) {
-    val size = 420
-    val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bmp)
-
-    val primaryInt = species.primaryColor.toArgbInt()
-    val secondaryInt = species.secondaryColor.toArgbInt()
-    val foliageInt = species.foliageColor.toArgbInt()
-
-    // Vintage parchment gradient tinted subtly with species botanical pigment
-    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      shader = LinearGradient(
-        0f, 0f, size.toFloat(), size.toFloat(),
-        intArrayOf(0xFFF3EBDD.toInt(), blendColors(0xFFEDE1CE.toInt(), primaryInt, 0.20f)),
-        null,
-        Shader.TileMode.CLAMP
-      )
-    }
-    canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
-
-    // Soft botanical pigment wash behind specimen
-    val washPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      shader = RadialGradient(
-        size * 0.52f, size * 0.48f, size * 0.44f,
-        intArrayOf(withAlpha(primaryInt, 90), withAlpha(foliageInt, 45), 0x00000000),
-        floatArrayOf(0f, 0.55f, 1f),
-        Shader.TileMode.CLAMP
-      )
-    }
-    canvas.drawCircle(size * 0.52f, size * 0.48f, size * 0.44f, washPaint)
-
-    // Double botanical plate border
-    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      style = Paint.Style.STROKE
-      strokeWidth = 2.5f
-      color = 0xFF3A3127.toInt()
-    }
-    canvas.drawRect(16f, 16f, size - 16f, size - 16f, borderPaint)
-    borderPaint.strokeWidth = 1f
-    borderPaint.alpha = 140
-    canvas.drawRect(24f, 24f, size - 24f, size - 24f, borderPaint)
-
-    // Stylized botanical centerpiece on bitmap for authentic Palette extraction
-    val petalPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = primaryInt
-      style = Paint.Style.FILL
-    }
-    val petalAccent = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = secondaryInt
-      style = Paint.Style.FILL
-    }
-    val leafPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = foliageInt
-      style = Paint.Style.FILL
-    }
-    val inkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = 0xFF28211A.toInt()
-      style = Paint.Style.STROKE
-      strokeWidth = 3f
-      strokeCap = Paint.Cap.ROUND
-    }
-
-    val cx = size * 0.5f
-    val cy = size * 0.5f
-
-    // Stem
-    val stem = Path().apply {
-      moveTo(cx, size * 0.82f)
-      quadTo(cx - 18f, cy + 40f, cx, cy - 10f)
-    }
-    canvas.drawPath(stem, inkPaint.apply { strokeWidth = 5f })
-
-    // Foliage leaves
-    for (dir in listOf(-1f, 1f)) {
-      val leaf = Path().apply {
-        moveTo(cx - 4f, cy + 68f)
-        quadTo(cx + dir * 90f, cy + 12f, cx + dir * 105f, cy + 72f)
-        quadTo(cx + dir * 45f, cy + 94f, cx - 4f, cy + 68f)
-      }
-      canvas.drawPath(leaf, leafPaint)
-      canvas.drawPath(leaf, inkPaint.apply { strokeWidth = 2.5f })
-    }
-
-    // Radial botanical petals
-    val petalCount = if (species.id == BotanicalSpeciesId.GINKGO) 3 else 6
-    for (i in 0 until petalCount) {
-      val angleDeg = (360f / petalCount) * i - 90f
-      canvas.save()
-      canvas.rotate(angleDeg, cx, cy - 26f)
-      val petal = Path().apply {
-        moveTo(cx, cy - 26f)
-        cubicTo(cx - 32f, cy - 82f, cx - 22f, cy - 132f, cx, cy - 142f)
-        cubicTo(cx + 22f, cy - 132f, cx + 32f, cy - 82f, cx, cy - 26f)
-      }
-      canvas.drawPath(petal, if (i % 2 == 0) petalPaint else petalAccent)
-      canvas.drawPath(petal, inkPaint.apply { strokeWidth = 2.5f })
-      canvas.restore()
-    }
-
-    // Center stamen crown
-    canvas.drawCircle(cx, cy - 26f, 14f, petalAccent)
-    canvas.drawCircle(cx, cy - 26f, 14f, inkPaint)
-
-    // Plate title caption at bottom
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-      color = 0xFF28211A.toInt()
-      textSize = 18f
-      typeface = Typeface.SERIF
-      textAlign = Paint.Align.CENTER
-    }
-    canvas.drawText(species.scientificName, cx, size - 36f, textPaint)
-
-    FileOutputStream(file).use { out ->
-      bmp.compress(Bitmap.CompressFormat.PNG, 92, out)
-    }
-    bmp.recycle()
-  }
-
-  private fun androidx.compose.ui.graphics.Color.toArgbInt(): Int {
-    val a = (alpha * 255).toInt() and 0xFF
-    val r = (red * 255).toInt() and 0xFF
-    val g = (green * 255).toInt() and 0xFF
-    val b = (blue * 255).toInt() and 0xFF
-    return (a shl 24) or (r shl 16) or (g shl 8) or b
-  }
-
-  private fun withAlpha(color: Int, alpha: Int): Int =
-    (alpha shl 24) or (color and 0x00FFFFFF)
-
-  private fun blendColors(c1: Int, c2: Int, ratio: Float): Int {
-    val inv = 1f - ratio
-    val r = (((c1 shr 16) and 0xFF) * inv + ((c2 shr 16) and 0xFF) * ratio).toInt()
-    val g = (((c1 shr 8) and 0xFF) * inv + ((c2 shr 8) and 0xFF) * ratio).toInt()
-    val b = ((c1 and 0xFF) * inv + (c2 and 0xFF) * ratio).toInt()
-    return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
   }
 }

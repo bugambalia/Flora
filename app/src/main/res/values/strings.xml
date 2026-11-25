@@ -14,4 +14,6 @@
     <string name="notification_channel_name">Reproducción botánica</string>
     <string name="scan_channel_name">Detección de fonoteca</string>
     <string name="scan_service_notification_text">Buscando audios mayores a 90 s para Botanical Library</string>
+    <string name="nav_settings">Ajustes</string>
+    <string name="settings_title">Ajustes</string>
 </resources>

@@ -525,6 +525,35 @@ object BotanicalLyricsCatalog {
   }
 }
 
+enum class AppThemeMode(val label: String) {
+  SYSTEM("Sistema"),
+  LIGHT("Claro"),
+  DARK("Oscuro");
+
+  companion object {
+    fun fromName(name: String?): AppThemeMode =
+      entries.firstOrNull { it.name == name } ?: SYSTEM
+  }
+}
+
+enum class LibraryFilterTab(val label: String) {
+  ALL("Todas"),
+  FAVORITES("Favoritos"),
+  ALBUMS("Álbumes"),
+  ARTISTS("Artistas"),
+  MOST_PLAYED("Más escuchadas"),
+  RECENT("Recientes"),
+}
+
+enum class LibrarySortOrder(val label: String) {
+  TITLE_AZ("Título A–Z"),
+  ARTIST("Artista A–Z"),
+  ALBUM("Álbum A–Z"),
+  DURATION("Duración"),
+  RECENT("Más recientes"),
+  MOST_PLAYED("Más escuchadas"),
+}
+
 @Immutable
 data class AudioTrack(
   val id: Long,
@@ -544,7 +573,29 @@ data class AudioTrack(
   val isBundled: Boolean,
   val sourceFolder: String = "Herbario",
   val sourcePath: String = "herbarium://bundled",
+  val dateAdded: Long = 0L,
+  val lyrics: String? = null,
 )
+
+@Immutable
+data class AlbumGroupSummary(
+  val albumName: String,
+  val artistName: String,
+  val tracks: List<AudioTrack>,
+  val coverTrack: AudioTrack,
+) {
+  val totalDurationMs: Long get() = tracks.sumOf { it.durationMs }
+}
+
+@Immutable
+data class ArtistGroupSummary(
+  val artistName: String,
+  val albumCount: Int,
+  val tracks: List<AudioTrack>,
+  val coverTrack: AudioTrack,
+) {
+  val totalDurationMs: Long get() = tracks.sumOf { it.durationMs }
+}
 
 @Immutable
 data class AudioSourceSummary(
@@ -711,6 +762,8 @@ data class AudioEffectsState(
   val chameleonThemeEnabled: Boolean = true,
   val playerThemeId: String = "AUTO",
   val sleepTimerMinutesRemaining: Int? = null,
+  val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
+  val minScanDurationSec: Int = 90,
 )
 
 enum class RepeatModeOption { OFF, ALL, ONE }
@@ -721,6 +774,7 @@ data class PlaybackState(
   val queue: List<AudioTrack> = emptyList(),
   val currentIndex: Int = -1,
   val isPlaying: Boolean = false,
+  val isBuffering: Boolean = false,
   val positionMs: Long = 0L,
   val durationMs: Long = 0L,
   val bufferedPercentage: Int = 100,
@@ -729,6 +783,7 @@ data class PlaybackState(
   val activePlaylistName: String? = null,
   val audioSessionId: Int = 0,
   val gaplessTransitionsCount: Int = 0,
+  val errorMessage: String? = null,
 )
 
 @Immutable
@@ -761,6 +816,7 @@ data class LibraryCatalogData(
   val availableLetters: Set<Char> = emptySet(),
   val letterToItemIndex: Map<Char, Int> = emptyMap(),
   val sectionTrackCounts: Map<Char, Int> = emptyMap(),
+  val usesAlphabetSections: Boolean = true,
 )
 
 fun trackSectionChar(title: String): Char {
@@ -770,10 +826,66 @@ fun trackSectionChar(title: String): Char {
 
 fun chSortPriority(ch: Char): Int = if (ch == '#') 1 else 0
 
-fun buildLibraryCatalogData(tracks: List<AudioTrack>): LibraryCatalogData {
+fun formatListenDuration(seconds: Int): String {
+  val safe = seconds.coerceAtLeast(0)
+  val hours = safe / 3600
+  val minutes = (safe % 3600) / 60
+  val secs = safe % 60
+  return when {
+    hours > 0 -> "${hours}h ${minutes}m"
+    minutes > 0 -> "${minutes}m ${secs}s"
+    else -> "${secs}s"
+  }
+}
+
+fun buildLibraryCatalogData(
+  tracks: List<AudioTrack>,
+  sortOrder: LibrarySortOrder = LibrarySortOrder.TITLE_AZ,
+): LibraryCatalogData {
   if (tracks.isEmpty()) return LibraryCatalogData()
+
+  val alphabeticalKeySelector: ((AudioTrack) -> String)? = when (sortOrder) {
+    LibrarySortOrder.TITLE_AZ -> { it -> it.title }
+    LibrarySortOrder.ARTIST -> { it -> it.artist }
+    LibrarySortOrder.ALBUM -> { it -> it.album }
+    LibrarySortOrder.DURATION,
+    LibrarySortOrder.RECENT,
+    LibrarySortOrder.MOST_PLAYED -> null
+  }
+
+  if (alphabeticalKeySelector == null) {
+    val sorted = when (sortOrder) {
+      LibrarySortOrder.DURATION -> tracks.sortedWith(
+        compareByDescending<AudioTrack> { it.durationMs }.thenBy { it.title.trim().lowercase() }
+      )
+      LibrarySortOrder.RECENT -> tracks.sortedWith(
+        compareByDescending<AudioTrack> { it.dateAdded }.thenByDescending { it.id }
+      )
+      LibrarySortOrder.MOST_PLAYED -> tracks.sortedWith(
+        compareByDescending<AudioTrack> { it.playCount }.thenBy { it.title.trim().lowercase() }
+      )
+      else -> tracks
+    }
+    val rows = sorted.mapIndexed { idx, track ->
+      LibraryRowItem.TrackRow(
+        track = track,
+        flatIndex = idx,
+        sectionChar = trackSectionChar(track.title)
+      )
+    }
+    return LibraryCatalogData(
+      sortedTracks = sorted,
+      rowItems = rows,
+      availableLetters = emptySet(),
+      letterToItemIndex = emptyMap(),
+      sectionTrackCounts = emptyMap(),
+      usesAlphabetSections = false,
+    )
+  }
+
   val sorted = tracks.sortedWith(
-    compareBy<AudioTrack> { chSortPriority(trackSectionChar(it.title)) }
+    compareBy<AudioTrack> { chSortPriority(trackSectionChar(alphabeticalKeySelector(it))) }
+      .thenBy { alphabeticalKeySelector(it).trim().lowercase() }
       .thenBy { it.title.trim().lowercase() }
   )
   val rows = ArrayList<LibraryRowItem>(sorted.size + 26)
@@ -787,7 +899,7 @@ fun buildLibraryCatalogData(tracks: List<AudioTrack>): LibraryCatalogData {
   var flatIdx = 0
 
   for (track in sorted) {
-    val secChar = trackSectionChar(track.title)
+    val secChar = trackSectionChar(alphabeticalKeySelector(track))
     if (secChar != currentSection) {
       if (currentSection != null && sectionHeaderPos >= 0) {
         rows[sectionHeaderPos] = LibraryRowItem.SectionHeader(currentSection, sectionCount)
@@ -815,5 +927,6 @@ fun buildLibraryCatalogData(tracks: List<AudioTrack>): LibraryCatalogData {
     availableLetters = available,
     letterToItemIndex = indexMap,
     sectionTrackCounts = counts,
+    usesAlphabetSections = true,
   )
 }

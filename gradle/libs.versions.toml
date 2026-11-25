@@ -43,6 +43,7 @@ googleid = "1.1.1"
 media3 = "1.5.1"
 palette = "1.0.0"
 kotlinxSerializationJson = "1.8.0"
+profileinstaller = "1.4.1"
 
 
 [libraries]
@@ -102,6 +103,7 @@ androidx-media3-session = { group = "androidx.media3", name = "media3-session", 
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
 androidx-palette-ktx = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 
 
 [plugins]

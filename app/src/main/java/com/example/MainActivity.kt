@@ -1,13 +1,17 @@
 package com.example
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -36,6 +40,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material3.CircularProgressIndicator
@@ -56,10 +61,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,6 +78,10 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -81,31 +92,34 @@ import androidx.navigation.compose.rememberNavController
 import com.example.data.model.AudioTrack
 import com.example.data.model.BotanicalSpecies
 import com.example.data.model.BotanicalSpeciesId
+import com.example.data.model.PlaylistWithTracks
 import com.example.ui.components.AddToPlaylistSheet
 import com.example.ui.components.BotanicalSpecimenIllustration
 import com.example.ui.components.CreateOrEditPlaylistDialog
+import com.example.ui.components.DeleteTrackConfirmDialog
+import com.example.ui.components.EditLyricsDialog
+import com.example.ui.components.EditTrackMetadataDialog
 import com.example.ui.components.EqualizerOverlayScreen
 import com.example.ui.components.MiniPlayerBar
 import com.example.ui.components.ParchmentBackground
+import com.example.ui.components.TrackTechnicalDetailsDialog
 import com.example.ui.components.UpNextQueueSheet
 import com.example.ui.screens.FloracionScreen
 import com.example.ui.screens.HerbariumScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.NowPlayingScreen
 import com.example.ui.screens.PlaylistsScreen
-import com.example.ui.theme.FloraBorderInk
-import com.example.ui.theme.FloraInk
-import com.example.ui.theme.FloraMetaGreen
-import com.example.ui.theme.FloraNavIdle
-import com.example.ui.theme.FloraPaper
-import com.example.ui.theme.FloraPaperCard
-import com.example.ui.theme.FloraSageLight
+import com.example.ui.screens.SettingsOverlayScreen
 import com.example.ui.theme.FloraStripShape
-import com.example.ui.theme.FloraTerracotta
 import com.example.ui.theme.HerbariumTheme
+import com.example.ui.theme.LocalFloraColors
 import com.example.ui.viewmodel.HerbariumViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import java.io.File
 
 @Serializable object FloracionRoute
 @Serializable object LibraryRoute
@@ -138,6 +152,8 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
   val unlockedBanner by viewModel.unlockedBanner.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
   val context = LocalContext.current
+  val lifecycleOwner = LocalLifecycleOwner.current
+  val coroutineScope = rememberCoroutineScope()
 
   val navController = rememberNavController()
   val backStackEntry by navController.currentBackStackEntryAsState()
@@ -146,25 +162,89 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
   var showNowPlaying by rememberSaveable { mutableStateOf(false) }
   var showEqualizerOverlay by rememberSaveable { mutableStateOf(false) }
   var showHerbariumOverlay by rememberSaveable { mutableStateOf(false) }
+  var showSettingsOverlay by rememberSaveable { mutableStateOf(false) }
   var showQueueSheet by rememberSaveable { mutableStateOf(false) }
   var selectedPlaylistId by rememberSaveable { mutableStateOf<Long?>(null) }
   var inspectedSpeciesId by remember { mutableStateOf<BotanicalSpeciesId?>(null) }
   var trackPendingPlaylist by remember { mutableStateOf<AudioTrack?>(null) }
   var showCreatePlaylistModal by rememberSaveable { mutableStateOf(false) }
 
-  val notificationPermissionLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.RequestPermission(),
-    onResult = { }
-  )
-  LaunchedEffect(Unit) {
+  // Track action dialog states
+  var trackForDetails by remember { mutableStateOf<AudioTrack?>(null) }
+  var trackForEditMetadata by remember { mutableStateOf<AudioTrack?>(null) }
+  var pendingEditCoverPath by remember { mutableStateOf<String?>(null) }
+  var trackForEditLyrics by remember { mutableStateOf<Pair<AudioTrack, String>?>(null) }
+  var trackPendingLrcImport by remember { mutableStateOf<AudioTrack?>(null) }
+  var trackForDelete by remember { mutableStateOf<AudioTrack?>(null) }
+  var playlistPendingExport by remember { mutableStateOf<PlaylistWithTracks?>(null) }
+
+  val audioPermission = remember {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      val granted = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.POST_NOTIFICATIONS
-      ) == PackageManager.PERMISSION_GRANTED
-      if (!granted) {
-        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+      Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+      Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+  }
+  var hasAudioPermission by remember {
+    mutableStateOf(
+      ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
+    )
+  }
+
+  val startupPermissionsLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestMultiplePermissions(),
+    onResult = { results ->
+      val audioGranted = results[audioPermission] == true ||
+        ContextCompat.checkSelfPermission(context, audioPermission) == PackageManager.PERMISSION_GRANTED
+      hasAudioPermission = audioGranted
+      if (audioGranted) {
+        viewModel.scanAndAutoImportFolder()
       }
+    }
+  )
+
+  val audioPermissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission(),
+    onResult = { granted ->
+      hasAudioPermission = granted
+      if (granted) {
+        viewModel.scanAndAutoImportFolder()
+      }
+    }
+  )
+
+  DisposableEffect(lifecycleOwner) {
+    val observer = LifecycleEventObserver { _, event ->
+      when (event) {
+        Lifecycle.Event.ON_RESUME -> {
+          hasAudioPermission = ContextCompat.checkSelfPermission(
+            context,
+            audioPermission
+          ) == PackageManager.PERMISSION_GRANTED
+        }
+        Lifecycle.Event.ON_STOP -> {
+          viewModel.saveCurrentPlaybackSession()
+        }
+        else -> Unit
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+  }
+
+  LaunchedEffect(Unit) {
+    val needed = buildList {
+      if (ContextCompat.checkSelfPermission(context, audioPermission) != PackageManager.PERMISSION_GRANTED) {
+        add(audioPermission)
+      }
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+      ) {
+        add(Manifest.permission.POST_NOTIFICATIONS)
+      }
+    }
+    if (needed.isNotEmpty()) {
+      startupPermissionsLauncher.launch(needed.toTypedArray())
     }
   }
 
@@ -173,6 +253,74 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
     onResult = { treeUri ->
       if (treeUri != null) {
         viewModel.scanAndAutoImportFolder(treeUri = treeUri)
+      }
+    }
+  )
+
+  val importAudioFilesLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenMultipleDocuments(),
+    onResult = { uris ->
+      if (uris.isNotEmpty()) {
+        viewModel.importLocalAudio(uris)
+      }
+    }
+  )
+
+  val coverPhotoPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia(),
+    onResult = { uri ->
+      if (uri != null) {
+        coroutineScope.launch {
+          val copiedPath = copyImageToCustomCovers(context, uri)
+          if (copiedPath != null) {
+            pendingEditCoverPath = copiedPath
+          } else {
+            snackbarHostState.showSnackbar("No se pudo cargar la imagen seleccionada.")
+          }
+        }
+      }
+    }
+  )
+
+  val importLrcLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument(),
+    onResult = { uri ->
+      val targetTrack = trackPendingLrcImport
+      trackPendingLrcImport = null
+      if (uri != null && targetTrack != null) {
+        viewModel.importLyricsFromUri(targetTrack.id, uri)
+        trackForEditLyrics = null
+      }
+    }
+  )
+
+  val importPlaylistLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument(),
+    onResult = { uri ->
+      if (uri != null) {
+        viewModel.importPlaylistFromUri(uri)
+      }
+    }
+  )
+
+  val exportM3uLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.CreateDocument("audio/x-mpegurl"),
+    onResult = { uri ->
+      val pl = playlistPendingExport
+      playlistPendingExport = null
+      if (uri != null && pl != null) {
+        viewModel.exportPlaylistToUri(pl, "m3u", uri)
+      }
+    }
+  )
+
+  val exportJsonLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.CreateDocument("application/json"),
+    onResult = { uri ->
+      val pl = playlistPendingExport
+      playlistPendingExport = null
+      if (uri != null && pl != null) {
+        viewModel.exportPlaylistToUri(pl, "json", uri)
       }
     }
   )
@@ -191,9 +339,13 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
     albumPalette = uiState.albumPalette,
     themeGradients = uiState.themeGradients,
     chameleonEnabled = uiState.effectsState.chameleonThemeEnabled,
+    themeMode = uiState.effectsState.themeMode,
   ) {
+    val colors = LocalFloraColors.current
+
     val navigateToTab: (Any) -> Unit = { route ->
       showHerbariumOverlay = false
+      showSettingsOverlay = false
       navController.navigate(route) {
         popUpTo<FloracionRoute> { saveState = true }
         launchSingleTop = true
@@ -205,12 +357,33 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
       inspectedSpeciesId = id
       showNowPlaying = false
       showEqualizerOverlay = false
+      showSettingsOverlay = false
       showHerbariumOverlay = true
     }
 
     val openHerbariumAtlas: () -> Unit = {
       inspectedSpeciesId = null
+      showSettingsOverlay = false
       showHerbariumOverlay = true
+    }
+
+    val openSettings: () -> Unit = {
+      viewModel.refreshCoverCacheSize()
+      showSettingsOverlay = true
+    }
+
+    val openEditTrackMetadata: (AudioTrack) -> Unit = { track ->
+      pendingEditCoverPath = track.coverPath
+      trackForEditMetadata = track
+    }
+
+    val shareTrack: (AudioTrack) -> Unit = { track ->
+      val shared = shareAudioTrack(context, track)
+      if (!shared) {
+        coroutineScope.launch {
+          snackbarHostState.showSnackbar("No se encontró una app disponible para compartir esta pista.")
+        }
+      }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -223,7 +396,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
-              if (!isExpanded && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay) {
+              if (!isExpanded && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay && !showSettingsOverlay) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                   AnimatedVisibility(
                     visible = uiState.playbackState.currentTrack != null,
@@ -243,9 +416,9 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                     )
                   }
 
-                  HorizontalDivider(thickness = 1.dp, color = FloraBorderInk.copy(alpha = 0.22f))
+                  HorizontalDivider(thickness = 1.dp, color = colors.borderInk.copy(alpha = 0.22f))
                   NavigationBar(
-                    containerColor = FloraPaper.copy(alpha = 0.98f),
+                    containerColor = colors.paper.copy(alpha = 0.98f),
                     tonalElevation = 0.dp
                   ) {
                     val isHome = currentDest?.hasRoute<FloracionRoute>() == true || currentDest == null
@@ -253,11 +426,11 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                     val isCollection = currentDest?.hasRoute<PlaylistsRoute>() == true
 
                     val navColors = NavigationBarItemDefaults.colors(
-                      selectedIconColor = FloraInk,
-                      selectedTextColor = FloraInk,
-                      unselectedIconColor = FloraNavIdle,
-                      unselectedTextColor = FloraNavIdle,
-                      indicatorColor = FloraSageLight
+                      selectedIconColor = colors.ink,
+                      selectedTextColor = colors.ink,
+                      unselectedIconColor = colors.navIdle,
+                      unselectedTextColor = colors.navIdle,
+                      indicatorColor = colors.sageLight
                     )
 
                     NavigationBarItem(
@@ -327,7 +500,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
             ) {
               if (isExpanded) {
                 NavigationRail(
-                  containerColor = FloraPaper.copy(alpha = 0.96f),
+                  containerColor = colors.paper.copy(alpha = 0.96f),
                   modifier = Modifier.fillMaxHeight()
                 ) {
                   val isHome = currentDest?.hasRoute<FloracionRoute>() == true || currentDest == null
@@ -335,30 +508,30 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                   val isCollection = currentDest?.hasRoute<PlaylistsRoute>() == true
 
                   val railColors = NavigationRailItemDefaults.colors(
-                    selectedIconColor = FloraInk,
-                    selectedTextColor = FloraInk,
-                    unselectedIconColor = FloraNavIdle,
-                    unselectedTextColor = FloraNavIdle,
-                    indicatorColor = FloraSageLight
+                    selectedIconColor = colors.ink,
+                    selectedTextColor = colors.ink,
+                    unselectedIconColor = colors.navIdle,
+                    unselectedTextColor = colors.navIdle,
+                    indicatorColor = colors.sageLight
                   )
 
                   Spacer(modifier = Modifier.weight(0.2f))
                   NavigationRailItem(
-                    selected = !showHerbariumOverlay && isHome,
+                    selected = !showHerbariumOverlay && !showSettingsOverlay && isHome,
                     onClick = { navigateToTab(FloracionRoute) },
                     icon = { Icon(Icons.Filled.Home, contentDescription = "Floración") },
                     label = { Text("Floración") },
                     colors = railColors
                   )
                   NavigationRailItem(
-                    selected = !showHerbariumOverlay && isExplore,
+                    selected = !showHerbariumOverlay && !showSettingsOverlay && isExplore,
                     onClick = { navigateToTab(LibraryRoute) },
                     icon = { Icon(Icons.Filled.MusicNote, contentDescription = "Canciones") },
                     label = { Text("Canciones") },
                     colors = railColors
                   )
                   NavigationRailItem(
-                    selected = !showHerbariumOverlay && isCollection,
+                    selected = !showHerbariumOverlay && !showSettingsOverlay && isCollection,
                     onClick = { navigateToTab(PlaylistsRoute) },
                     icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Playlists") },
                     label = { Text("Playlists") },
@@ -371,6 +544,13 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                     label = { Text("Herbario") },
                     colors = railColors
                   )
+                  NavigationRailItem(
+                    selected = showSettingsOverlay,
+                    onClick = openSettings,
+                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Ajustes") },
+                    label = { Text("Ajustes") },
+                    colors = railColors
+                  )
                   Spacer(modifier = Modifier.weight(1f))
                 }
               }
@@ -378,7 +558,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
               Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 if (uiState.isLoading) {
                   Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = FloraTerracotta)
+                    CircularProgressIndicator(color = colors.terracotta)
                   }
                 } else {
                   NavHost(
@@ -406,7 +586,8 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                           viewModel.playPlaylist(pl, 0)
                         },
                         onOpenExplore = { navigateToTab(LibraryRoute) },
-                        onOpenHerbarium = openHerbariumAtlas
+                        onOpenHerbarium = openHerbariumAtlas,
+                        onOpenSettings = openSettings,
                       )
                     }
 
@@ -429,7 +610,19 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                         onAddToQueue = viewModel::appendToQueue,
                         onAddToPlaylistClick = { track -> trackPendingPlaylist = track },
                         onInspectSpecies = openSpeciesFolio,
-                        onOpenHerbarium = openHerbariumAtlas
+                        onOpenHerbarium = openHerbariumAtlas,
+                        selectedGenre = uiState.selectedGenre,
+                        onSelectGenre = viewModel::onSelectGenre,
+                        onSelectLibraryTab = viewModel::onSelectLibraryTab,
+                        onSelectSortOrder = viewModel::onSelectSortOrder,
+                        onImportFilesClick = { importAudioFilesLauncher.launch(arrayOf("audio/*")) },
+                        hasAudioPermission = hasAudioPermission,
+                        onRequestAudioPermission = { audioPermissionLauncher.launch(audioPermission) },
+                        onShowTrackDetails = { trackForDetails = it },
+                        onEditTrackMetadata = openEditTrackMetadata,
+                        onShareTrack = shareTrack,
+                        onDeleteTrack = { trackForDelete = it },
+                        onOpenSettings = openSettings,
                       )
                     }
 
@@ -448,13 +641,26 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                         onAddTrackToPlaylist = viewModel::addTrackToPlaylist,
                         onRemoveTrackFromPlaylist = viewModel::removeTrackFromPlaylist,
                         onSavePlaylistOrder = viewModel::savePlaylistOrder,
-                        onOpenHerbarium = openHerbariumAtlas
+                        onOpenHerbarium = openHerbariumAtlas,
+                        onDuplicatePlaylist = viewModel::duplicatePlaylist,
+                        onExportPlaylist = { pl, fmt ->
+                          playlistPendingExport = pl
+                          val safeFileBase = pl.playlist.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                          if (fmt.equals("json", ignoreCase = true)) {
+                            exportJsonLauncher.launch("$safeFileBase.json")
+                          } else {
+                            exportM3uLauncher.launch("$safeFileBase.m3u")
+                          }
+                        },
+                        onImportPlaylistClick = {
+                          importPlaylistLauncher.launch(arrayOf("*/*"))
+                        },
                       )
                     }
                   }
                 }
 
-                if (isExpanded && uiState.playbackState.currentTrack != null && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay) {
+                if (isExpanded && uiState.playbackState.currentTrack != null && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay && !showSettingsOverlay) {
                   MiniPlayerBar(
                     playbackState = uiState.playbackState,
                     positionMsFlow = viewModel.playbackPositionMs,
@@ -506,6 +712,26 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
       }
 
       AnimatedVisibility(
+        visible = showSettingsOverlay,
+        enter = slideInVertically { it } + fadeIn(),
+        exit = slideOutVertically { it } + fadeOut()
+      ) {
+        SettingsOverlayScreen(
+          uiState = uiState,
+          hasAudioPermission = hasAudioPermission,
+          onRequestAudioPermission = { audioPermissionLauncher.launch(audioPermission) },
+          onTriggerManualScan = viewModel::triggerManualLibraryScan,
+          onMinScanDurationChange = viewModel::setMinScanDurationSec,
+          onPickFolderClick = { folderTreePickerLauncher.launch(null) },
+          onImportFilesClick = { importAudioFilesLauncher.launch(arrayOf("audio/*")) },
+          onThemeModeChange = viewModel::setThemeMode,
+          onChameleonToggle = viewModel::toggleChameleonTheme,
+          onClearCoverCache = viewModel::clearCoverCache,
+          onDismiss = { showSettingsOverlay = false }
+        )
+      }
+
+      AnimatedVisibility(
         visible = showNowPlaying,
         enter = slideInVertically { it } + fadeIn(),
         exit = slideOutVertically { it } + fadeOut()
@@ -526,7 +752,16 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
           onOpenQueue = { showQueueSheet = true },
           onAddToPlaylist = { track -> trackPendingPlaylist = track },
           onInspectSpecies = openSpeciesFolio,
-          onSelectPlayerTheme = viewModel::selectPlayerTheme
+          onSelectPlayerTheme = viewModel::selectPlayerTheme,
+          onDismissPlaybackError = viewModel::dismissPlaybackError,
+          onShowTrackDetails = { trackForDetails = it },
+          onEditTrackMetadata = openEditTrackMetadata,
+          onShareTrack = shareTrack,
+          onEditLyrics = { track, seedText -> trackForEditLyrics = track to seedText },
+          onImportLrcFile = { track ->
+            trackPendingLrcImport = track
+            importLrcLauncher.launch(arrayOf("*/*"))
+          },
         )
       }
 
@@ -607,7 +842,132 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
         onDismiss = { showCreatePlaylistModal = false }
       )
     }
+
+    trackForDetails?.let { track ->
+      TrackTechnicalDetailsDialog(
+        track = track,
+        onDismiss = { trackForDetails = null }
+      )
+    }
+
+    trackForEditMetadata?.let { track ->
+      EditTrackMetadataDialog(
+        track = track,
+        selectedCoverPath = pendingEditCoverPath,
+        onPickCoverImage = {
+          coverPhotoPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+          )
+        },
+        onClearCustomCover = { pendingEditCoverPath = null },
+        onSave = { title, artist, album, genre, coverPath ->
+          viewModel.updateTrackMetadata(track.id, title, artist, album, genre, coverPath)
+          trackForEditMetadata = null
+        },
+        onDismiss = { trackForEditMetadata = null }
+      )
+    }
+
+    trackForEditLyrics?.let { (track, seedText) ->
+      EditLyricsDialog(
+        track = track,
+        initialLyrics = seedText,
+        onImportLrcFile = {
+          trackPendingLrcImport = track
+          importLrcLauncher.launch(arrayOf("*/*"))
+        },
+        onSave = { rawLyrics ->
+          viewModel.updateTrackLyrics(track.id, rawLyrics)
+          trackForEditLyrics = null
+        },
+        onDismiss = { trackForEditLyrics = null }
+      )
+    }
+
+    trackForDelete?.let { track ->
+      DeleteTrackConfirmDialog(
+        track = track,
+        onConfirm = {
+          viewModel.deleteTrack(track)
+          trackForDelete = null
+        },
+        onDismiss = { trackForDelete = null }
+      )
+    }
   }
+}
+
+private suspend fun copyImageToCustomCovers(context: Context, uri: Uri): String? =
+  withContext(Dispatchers.IO) {
+    runCatching {
+      val maxDimPx = 720
+      val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      context.contentResolver.openInputStream(uri)?.use { input ->
+        android.graphics.BitmapFactory.decodeStream(input, null, bounds)
+      }
+      if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
+
+      val sampleSize = com.example.ui.components.calculateInSampleSize(
+        rawWidth = bounds.outWidth,
+        rawHeight = bounds.outHeight,
+        reqWidth = maxDimPx,
+        reqHeight = maxDimPx,
+      )
+      val decoded = context.contentResolver.openInputStream(uri)?.use { input ->
+        android.graphics.BitmapFactory.decodeStream(
+          input,
+          null,
+          android.graphics.BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        )
+      } ?: return@withContext null
+
+      val maxSide = maxOf(decoded.width, decoded.height)
+      val scaled = if (maxSide > maxDimPx) {
+        val ratio = maxDimPx.toFloat() / maxSide.toFloat()
+        val targetW = (decoded.width * ratio).toInt().coerceAtLeast(1)
+        val targetH = (decoded.height * ratio).toInt().coerceAtLeast(1)
+        android.graphics.Bitmap.createScaledBitmap(decoded, targetW, targetH, true)
+      } else {
+        decoded
+      }
+
+      val dir = File(context.filesDir, "custom_covers").apply { mkdirs() }
+      val destFile = File(dir, "cover_${System.currentTimeMillis()}.jpg")
+      try {
+        destFile.outputStream().use { output ->
+          scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, output)
+        }
+      } finally {
+        if (scaled !== decoded) scaled.recycle()
+        decoded.recycle()
+      }
+      destFile.absolutePath
+    }.getOrNull()
+  }
+
+private fun shareAudioTrack(context: Context, track: AudioTrack): Boolean {
+  return runCatching {
+    val parsed = Uri.parse(track.uri)
+    val shareUri = if (parsed.scheme == "file" && !parsed.path.isNullOrBlank()) {
+      FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        File(parsed.path!!)
+      )
+    } else {
+      parsed
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+      type = "audio/*"
+      putExtra(Intent.EXTRA_STREAM, shareUri)
+      putExtra(Intent.EXTRA_SUBJECT, track.title)
+      putExtra(Intent.EXTRA_TEXT, "${track.title} — ${track.artist}")
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val chooser = Intent.createChooser(intent, "Compartir canción")
+    context.startActivity(chooser)
+    true
+  }.getOrDefault(false)
 }
 
 @Composable
@@ -616,10 +976,11 @@ private fun BotanicalBloomBanner(
   onViewPlate: () -> Unit,
   onDismiss: () -> Unit,
 ) {
+  val colors = LocalFloraColors.current
   Surface(
     shape = FloraStripShape,
-    color = FloraPaperCard,
-    border = BorderStroke(1.2.dp, FloraBorderInk),
+    color = colors.paperCard,
+    border = BorderStroke(1.2.dp, colors.borderInk),
     shadowElevation = 6.dp,
     modifier = Modifier
       .fillMaxWidth()
@@ -639,20 +1000,20 @@ private fun BotanicalBloomBanner(
         Text(
           "FLORECIDA",
           style = MaterialTheme.typography.labelMedium,
-          color = FloraTerracotta
+          color = colors.terracotta
         )
-        Text(species.commonName, style = MaterialTheme.typography.titleMedium, color = FloraInk)
+        Text(species.commonName, style = MaterialTheme.typography.titleMedium, color = colors.ink)
         Text(
           species.scientificName,
           style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
-          color = FloraMetaGreen
+          color = colors.metaGreen
         )
       }
       TextButton(onClick = onViewPlate) {
-        Text("Ver", color = FloraTerracotta, style = MaterialTheme.typography.labelLarge)
+        Text("Ver", color = colors.terracotta, style = MaterialTheme.typography.labelLarge)
       }
       IconButton(onClick = onDismiss) {
-        Icon(Icons.Filled.Close, contentDescription = "Cerrar", tint = FloraInk)
+        Icon(Icons.Filled.Close, contentDescription = "Cerrar", tint = colors.ink)
       }
     }
   }

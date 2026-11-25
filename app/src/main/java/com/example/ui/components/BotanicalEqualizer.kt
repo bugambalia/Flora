@@ -84,6 +84,7 @@ import com.example.ui.theme.FloraSageLight
 import com.example.ui.theme.FloraShadowPaper
 import com.example.ui.theme.FloraStripShape
 import com.example.ui.theme.FloraTerracotta
+import com.example.ui.theme.LocalFloraColors
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -204,6 +205,7 @@ fun BotanicalEqualizerPanel(
     EqualizerPreset.FOREST_CLARITY
   )
   val specializedPresets = EqualizerPreset.entries.filterNot { it in primary4Presets }
+  val colors = LocalFloraColors.current
 
   Column(
     modifier = modifier.fillMaxWidth(),
@@ -392,7 +394,7 @@ fun BotanicalEqualizerPanel(
           rowPresets.forEach { preset ->
             val selected = effectsState.preset == preset
             val bgColor by animateColorAsState(
-              targetValue = if (selected) FloraTerracotta else FloraPaperWarm,
+              targetValue = if (selected) colors.terracotta else colors.paperWarm,
               animationSpec = tween(220),
               label = "presetBg_${preset.name}"
             )
@@ -401,7 +403,7 @@ fun BotanicalEqualizerPanel(
               color = bgColor,
               border = BorderStroke(
                 1.dp,
-                if (selected) FloraTerracotta else FloraBorderInk.copy(alpha = 0.35f)
+                if (selected) colors.terracotta else colors.borderInk.copy(alpha = 0.35f)
               ),
               modifier = Modifier
                 .weight(1f)
@@ -422,7 +424,7 @@ fun BotanicalEqualizerPanel(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp
                   ),
-                  color = if (selected) FloraPlayerCream else FloraInk,
+                  color = if (selected) FloraPlayerCream else colors.ink,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis
                 )
@@ -449,10 +451,10 @@ fun BotanicalEqualizerPanel(
           val species = BotanicalCatalog.getById(preset.speciesId)
           Surface(
             shape = FloraStripShape,
-            color = if (isSelected) FloraTerracotta else FloraPaperCard,
+            color = if (isSelected) colors.terracotta else colors.paperCard,
             border = BorderStroke(
               width = if (isSelected) 1.5.dp else 1.dp,
-              color = if (isSelected) FloraTerracotta else FloraBorderInk.copy(alpha = 0.45f)
+              color = if (isSelected) colors.terracotta else colors.borderInk.copy(alpha = 0.45f)
             ),
             modifier = Modifier
               .clip(FloraStripShape)
@@ -471,7 +473,7 @@ fun BotanicalEqualizerPanel(
               Text(
                 text = preset.label,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = if (isSelected) FloraPlayerCream else FloraInk,
+                color = if (isSelected) FloraPlayerCream else colors.ink,
                 maxLines = 1
               )
             }
@@ -485,17 +487,17 @@ fun BotanicalEqualizerPanel(
         enabled = enabled,
         modifier = Modifier.testTag("eq_reset_flat_button")
       ) {
-        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = FloraTerracotta)
+        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = colors.terracotta)
         Spacer(modifier = Modifier.width(4.dp))
-        Text("0 dB", style = MaterialTheme.typography.labelLarge, color = FloraTerracotta)
+        Text("0 dB", style = MaterialTheme.typography.labelLarge, color = colors.terracotta)
       }
     }
 
     // Bass Boost & 3D Virtualizer
     FloraMountedPlate(
       shape = FloraStripShape,
-      containerColor = FloraPaperCard,
-      borderColor = FloraBorderInk.copy(alpha = 0.45f),
+      containerColor = colors.paperCard,
+      borderColor = colors.borderInk.copy(alpha = 0.45f),
       shadowOffsetX = 0.dp,
       shadowOffsetY = 0.dp,
       modifier = Modifier
@@ -510,11 +512,11 @@ fun BotanicalEqualizerPanel(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Graves", style = MaterialTheme.typography.titleSmall, color = FloraInk)
+          Text("Graves", style = MaterialTheme.typography.titleSmall, color = colors.ink)
           Text(
             "${effectsState.bassBoostStrength / 10}%",
             style = MaterialTheme.typography.labelLarge,
-            color = FloraTerracotta
+            color = colors.terracotta
           )
         }
         Slider(
@@ -523,9 +525,9 @@ fun BotanicalEqualizerPanel(
           enabled = enabled,
           valueRange = 0f..1000f,
           colors = SliderDefaults.colors(
-            thumbColor = FloraTerracotta,
-            activeTrackColor = FloraTerracotta,
-            inactiveTrackColor = FloraBorderInk.copy(alpha = 0.2f)
+            thumbColor = colors.terracotta,
+            activeTrackColor = colors.terracotta,
+            inactiveTrackColor = colors.borderInk.copy(alpha = 0.2f)
           ),
           modifier = Modifier.testTag("bass_boost_slider")
         )
@@ -534,11 +536,11 @@ fun BotanicalEqualizerPanel(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween
         ) {
-          Text("Espacial 3D", style = MaterialTheme.typography.titleSmall, color = FloraInk)
+          Text("Espacial 3D", style = MaterialTheme.typography.titleSmall, color = colors.ink)
           Text(
             "${effectsState.virtualizerStrength / 10}%",
             style = MaterialTheme.typography.labelLarge,
-            color = FloraForest
+            color = colors.forest
           )
         }
         Slider(
@@ -547,9 +549,9 @@ fun BotanicalEqualizerPanel(
           enabled = enabled,
           valueRange = 0f..1000f,
           colors = SliderDefaults.colors(
-            thumbColor = FloraForest,
-            activeTrackColor = FloraForest,
-            inactiveTrackColor = FloraBorderInk.copy(alpha = 0.2f)
+            thumbColor = colors.forest,
+            activeTrackColor = colors.forest,
+            inactiveTrackColor = colors.borderInk.copy(alpha = 0.2f)
           ),
           modifier = Modifier.testTag("virtualizer_slider")
         )

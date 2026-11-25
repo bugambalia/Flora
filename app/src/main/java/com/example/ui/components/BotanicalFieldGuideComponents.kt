@@ -53,12 +53,9 @@ import com.example.ui.theme.FloraBorderInk
 import com.example.ui.theme.FloraForest
 import com.example.ui.theme.FloraGold
 import com.example.ui.theme.FloraGoldSoft
-import com.example.ui.theme.FloraInk
-import com.example.ui.theme.FloraPaper
 import com.example.ui.theme.FloraPlateShape
-import com.example.ui.theme.FloraSage
-import com.example.ui.theme.FloraShadowPaper
 import com.example.ui.theme.FloraTerracotta
+import com.example.ui.theme.LocalFloraColors
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -111,12 +108,12 @@ fun FloraFlowerGlyph(
 fun FloraMountedPlate(
   modifier: Modifier = Modifier,
   shape: Shape = FloraPlateShape,
-  containerColor: Color = FloraPaper,
-  borderColor: Color = FloraBorderInk,
+  containerColor: Color = LocalFloraColors.current.paper,
+  borderColor: Color = LocalFloraColors.current.borderInk,
   goldHairline: Boolean = false,
   shadowOffsetX: Dp = 4.dp,
   shadowOffsetY: Dp = 5.dp,
-  shadowColor: Color = FloraShadowPaper,
+  shadowColor: Color = LocalFloraColors.current.shadowPaper,
   onClick: (() -> Unit)? = null,
   content: @Composable BoxScope.() -> Unit,
 ) {
@@ -165,6 +162,7 @@ fun FloraScreenHeader(
   sealContentDescription: String = "Abrir Herbario Anatómico",
   trailingExtra: (@Composable () -> Unit)? = null,
 ) {
+  val colors = LocalFloraColors.current
   Column(
     modifier = modifier.fillMaxWidth(),
     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -178,7 +176,7 @@ fun FloraScreenHeader(
         Text(
           text = kicker,
           style = MaterialTheme.typography.labelMedium,
-          color = FloraSage,
+          color = colors.sage,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
@@ -189,13 +187,13 @@ fun FloraScreenHeader(
           Text(
             text = title,
             style = MaterialTheme.typography.displayLarge,
-            color = FloraInk,
+            color = colors.ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
           )
           FloraFlowerGlyph(
             modifier = Modifier.size(20.dp),
-            color = FloraTerracotta,
+            color = colors.terracotta,
             filled = false
           )
         }
@@ -212,11 +210,11 @@ fun FloraScreenHeader(
             .minimumInteractiveComponentSize()
             .size(46.dp)
             .clip(CircleShape)
-            .border(1.dp, FloraBorderInk.copy(alpha = 0.35f), CircleShape)
+            .border(1.dp, colors.borderInk.copy(alpha = 0.35f), CircleShape)
             .padding(3.dp)
             .clip(CircleShape)
             .background(FloraForest)
-            .border(1.dp, FloraGold.copy(alpha = 0.75f), CircleShape)
+            .border(1.dp, colors.gold.copy(alpha = 0.75f), CircleShape)
             .clickable(onClick = onSealClick)
             .semantics { contentDescription = sealContentDescription }
             .testTag("flora_header_herbarium_seal"),
@@ -232,7 +230,7 @@ fun FloraScreenHeader(
         }
       }
     }
-    HorizontalDivider(thickness = 1.dp, color = FloraBorderInk.copy(alpha = 0.22f))
+    HorizontalDivider(thickness = 1.dp, color = colors.borderInk.copy(alpha = 0.22f))
   }
 }
 
@@ -330,8 +328,8 @@ enum class MarginaliaKind { UNIAXIAL_BRANCH, SYMPODIAL_TWIG, SEED_SECTION, SPROU
 fun MarginaliaSketch(
   kind: MarginaliaKind,
   modifier: Modifier = Modifier,
-  inkColor: Color = FloraInk.copy(alpha = 0.78f),
-  tintColor: Color = FloraTerracotta.copy(alpha = 0.45f),
+  inkColor: Color = LocalFloraColors.current.ink.copy(alpha = 0.78f),
+  tintColor: Color = LocalFloraColors.current.terracotta.copy(alpha = 0.45f),
 ) {
   Canvas(modifier = modifier.padding(2.dp)) {
     val w = size.width
@@ -389,6 +387,7 @@ fun FloraDashedEmptyPlate(
   message: String,
   modifier: Modifier = Modifier,
 ) {
+  val colors = LocalFloraColors.current
   Box(
     modifier = modifier
       .fillMaxWidth()
@@ -398,7 +397,7 @@ fun FloraDashedEmptyPlate(
         val path = Path().apply { addOutline(outline) }
         drawPath(
           path = path,
-          color = FloraBorderInk.copy(alpha = 0.32f),
+          color = colors.borderInk.copy(alpha = 0.32f),
           style = Stroke(width = 1.2.dp.toPx(), pathEffect = dash)
         )
       }
@@ -411,12 +410,12 @@ fun FloraDashedEmptyPlate(
     ) {
       FloraFlowerGlyph(
         modifier = Modifier.size(28.dp),
-        color = FloraTerracotta.copy(alpha = 0.75f)
+        color = colors.terracotta.copy(alpha = 0.75f)
       )
       Text(
         text = message,
         style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic),
-        color = FloraInk.copy(alpha = 0.85f),
+        color = colors.ink.copy(alpha = 0.85f),
         textAlign = TextAlign.Center
       )
     }

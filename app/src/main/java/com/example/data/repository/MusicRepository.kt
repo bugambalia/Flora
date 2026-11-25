@@ -108,7 +108,10 @@ class MusicRepository(
     }
   }
 
-  suspend fun scanAccessibleFolders(extraTreeUri: Uri? = null): DominantFolderScanResult {
+  suspend fun scanAccessibleFolders(
+    extraTreeUri: Uri? = null,
+    minDurationMs: Long = AudioFolderScanner.MIN_LONG_AUDIO_DURATION_MS,
+  ): DominantFolderScanResult {
     if (extraTreeUri != null) {
       runCatching {
         context.contentResolver.takePersistableUriPermission(
@@ -120,14 +123,16 @@ class MusicRepository(
     return AudioFolderScanner.scanAllAccessibleSources(
       context = context,
       extraTreeUris = listOfNotNull(extraTreeUri),
+      minDurationMs = minDurationMs,
     )
   }
 
   suspend fun scanAndCategorizeIntoBotanicalLibrary(
     extraTreeUri: Uri? = null,
     triggeredManually: Boolean = false,
+    minDurationMs: Long = AudioFolderScanner.MIN_LONG_AUDIO_DURATION_MS,
   ): BotanicalLibraryScanSummary = withContext(Dispatchers.IO) {
-    val scanResult = scanAccessibleFolders(extraTreeUri)
+    val scanResult = scanAccessibleFolders(extraTreeUri, minDurationMs)
     var newlyImported = 0
 
     if (scanResult.allFolders.isNotEmpty()) {
@@ -154,7 +159,7 @@ class MusicRepository(
       }
     }
 
-    val (collectionId, newlyCategorized, totalInLibrary) = categorizeLongTracksIntoBotanicalLibrary()
+    val (collectionId, newlyCategorized, totalInLibrary) = categorizeLongTracksIntoBotanicalLibrary(minDurationMs)
     BotanicalLibraryScanSummary(
       scanResult = scanResult,
       newlyImportedCount = newlyImported,
@@ -179,7 +184,7 @@ class MusicRepository(
     val collectionId = existingPlaylist?.id ?: dao.insertPlaylist(
       PlaylistEntity(
         name = BOTANICAL_LIBRARY_COLLECTION_NAME,
-        description = "Audios mayores a 90 s detectados automáticamente",
+        description = "Audios mayores a ${minDurationMs / 1000L} s detectados automáticamente",
         speciesMotif = BotanicalSpeciesId.MONSTERA.id,
       )
     )
@@ -241,6 +246,43 @@ class MusicRepository(
     return null
   }
 
+  suspend fun updateTrackMetadata(
+    trackId: Long,
+    title: String,
+    artist: String,
+    album: String,
+    genre: String,
+    coverPath: String?,
+  ): BotanicalSpeciesId = withContext(Dispatchers.IO) {
+    val cleanGenre = genre.trim().ifBlank { "Acústico" }
+    val matchedSpecies = BotanicalCatalog.matchSpeciesForGenre(cleanGenre)
+    dao.updateTrackMetadata(
+      trackId = trackId,
+      title = title.trim().ifBlank { "Pista sin título" },
+      artist = artist.trim().ifBlank { "Artista desconocido" },
+      album = album.trim().ifBlank { "Sin álbum" },
+      genre = cleanGenre,
+      speciesId = matchedSpecies.id,
+      coverPath = coverPath,
+    )
+    matchedSpecies
+  }
+
+  suspend fun updateTrackLyrics(trackId: Long, rawLyrics: String?) = withContext(Dispatchers.IO) {
+    dao.updateTrackLyrics(trackId, rawLyrics?.trim()?.takeIf { it.isNotEmpty() })
+  }
+
+  suspend fun deleteTrack(trackId: Long) = withContext(Dispatchers.IO) {
+    dao.deleteTrack(trackId)
+  }
+
+  suspend fun addListenSeconds(speciesId: BotanicalSpeciesId, deltaSeconds: Int) {
+    if (deltaSeconds <= 0) return
+    withContext(Dispatchers.IO) {
+      dao.addListenSeconds(speciesId.id, deltaSeconds)
+    }
+  }
+
   suspend fun createPlaylist(
     name: String,
     description: String,
@@ -262,6 +304,30 @@ class MusicRepository(
       "Desbloqueado al curar la lista «$name»"
     )
     return id to unlocked
+  }
+
+  suspend fun duplicatePlaylist(source: PlaylistWithTracks): Pair<Long, BotanicalSpecies?> {
+    val copyName = "${source.playlist.name} (copia)"
+    return createPlaylist(
+      name = copyName,
+      description = source.playlist.description,
+      motif = source.playlist.speciesMotif,
+      initialTrackIds = source.tracks.map { it.id },
+    )
+  }
+
+  suspend fun importPlaylistData(
+    data: ImportedPlaylistData,
+    libraryTracks: List<AudioTrack>,
+  ): Pair<Long, Int> {
+    val matched = PlaylistSerializer.matchTracksInLibrary(data.trackRefs, libraryTracks)
+    val (id, _) = createPlaylist(
+      name = data.name,
+      description = data.description,
+      motif = data.motif,
+      initialTrackIds = matched.map { it.id },
+    )
+    return id to matched.size
   }
 
   suspend fun updatePlaylist(playlistId: Long, name: String, description: String, motif: BotanicalSpeciesId) {

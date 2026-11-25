@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.Lock
@@ -66,28 +66,20 @@ import com.example.data.model.AnatomicalCallout
 import com.example.data.model.BotanicalCatalog
 import com.example.data.model.BotanicalSpecies
 import com.example.data.model.BotanicalSpeciesId
+import com.example.data.model.formatListenDuration
 import com.example.ui.components.BotanicalSpecimenIllustration
 import com.example.ui.components.DottedRuleDivider
 import com.example.ui.components.FloraMountedPlate
 import com.example.ui.components.FloraScreenHeader
 import com.example.ui.components.MarginaliaKind
 import com.example.ui.components.MarginaliaSketch
-import com.example.ui.theme.FloraBorderInk
 import com.example.ui.theme.FloraChipShape
-import com.example.ui.theme.FloraCobalt
-import com.example.ui.theme.FloraGold
 import com.example.ui.theme.FloraHeroShape
-import com.example.ui.theme.FloraInk
-import com.example.ui.theme.FloraMetaGreen
-import com.example.ui.theme.FloraPaper
-import com.example.ui.theme.FloraPaperCard
-import com.example.ui.theme.FloraPaperWarm
 import com.example.ui.theme.FloraPlateShape
 import com.example.ui.theme.FloraPlayerCream
-import com.example.ui.theme.FloraShadowPaper
 import com.example.ui.theme.FloraStripShape
-import com.example.ui.theme.FloraTerracotta
 import com.example.ui.theme.FloraThumbShape
+import com.example.ui.theme.LocalFloraColors
 import com.example.ui.viewmodel.HerbariumUiState
 
 private enum class HerbariumFilter { ALL, UNLOCKED, LOCKED }
@@ -102,6 +94,7 @@ fun HerbariumScreen(
   onBack: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
 ) {
+  val colors = LocalFloraColors.current
   var filter by remember { mutableStateOf(HerbariumFilter.ALL) }
 
   val filteredSpecies = remember(uiState.botanicalProgress, filter) {
@@ -118,12 +111,15 @@ fun HerbariumScreen(
   val inspectedSpecies = inspectedSpeciesId?.let { BotanicalCatalog.getById(it) }
   if (inspectedSpecies != null) {
     val plateNumber = (BotanicalCatalog.allSpecies.indexOfFirst { it.id == inspectedSpecies.id }.coerceAtLeast(0)) + 1
-    val isUnlocked = uiState.botanicalProgress[inspectedSpecies.id]?.isUnlocked == true
+    val progress = uiState.botanicalProgress[inspectedSpecies.id]
+    val isUnlocked = progress?.isUnlocked == true
+    val listenSeconds = progress?.listenSeconds ?: 0
     BackHandler { onInspectSpecies(null) }
     BotanicalSpecimenFolioView(
       plateNumber = plateNumber,
       species = inspectedSpecies,
       isUnlocked = isUnlocked,
+      listenSeconds = listenSeconds,
       onBack = { onInspectSpecies(null) },
       onPlayAssociatedGenre = { onPlayGenreForSpecies(inspectedSpecies) },
       onApplyPalette = { onPreviewPalette(inspectedSpecies.id) },
@@ -151,7 +147,7 @@ fun HerbariumScreen(
       modifier = Modifier.fillMaxSize()
     ) {
       item(span = { GridItemSpan(columns) }) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           FloraScreenHeader(
             title = "Herbario",
             sealText = "${uiState.unlockedCount}/${BotanicalCatalog.allSpecies.size}",
@@ -168,7 +164,7 @@ fun HerbariumScreen(
                   Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                     contentDescription = "Volver",
-                    tint = FloraInk,
+                    tint = colors.ink,
                     modifier = Modifier.size(28.dp)
                   )
                 }
@@ -181,10 +177,28 @@ fun HerbariumScreen(
             modifier = Modifier
               .fillMaxWidth()
               .height(5.dp),
-            color = FloraTerracotta,
-            trackColor = FloraBorderInk.copy(alpha = 0.2f),
+            color = colors.terracotta,
+            trackColor = colors.borderInk.copy(alpha = 0.2f),
             strokeCap = StrokeCap.Butt
           )
+
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.testTag("herbarium_total_listen_time")
+          ) {
+            Icon(
+              Icons.Filled.AccessTime,
+              contentDescription = null,
+              tint = colors.sage,
+              modifier = Modifier.size(15.dp)
+            )
+            Text(
+              text = "Tiempo total de cultivo sonoro: ${formatListenDuration(uiState.totalListenSeconds)}",
+              style = MaterialTheme.typography.labelMedium,
+              color = colors.metaGreen
+            )
+          }
 
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
@@ -193,7 +207,7 @@ fun HerbariumScreen(
               label = { Text("Todas") },
               shape = FloraChipShape,
               colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = FloraTerracotta,
+                selectedContainerColor = colors.terracotta,
                 selectedLabelColor = FloraPlayerCream
               )
             )
@@ -203,7 +217,7 @@ fun HerbariumScreen(
               label = { Text("Florecidas (${uiState.unlockedCount})") },
               shape = FloraChipShape,
               colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = FloraTerracotta,
+                selectedContainerColor = colors.terracotta,
                 selectedLabelColor = FloraPlayerCream
               )
             )
@@ -213,7 +227,7 @@ fun HerbariumScreen(
               label = { Text("Latentes") },
               shape = FloraChipShape,
               colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = FloraTerracotta,
+                selectedContainerColor = colors.terracotta,
                 selectedLabelColor = FloraPlayerCream
               )
             )
@@ -225,10 +239,12 @@ fun HerbariumScreen(
         val plateIdx = BotanicalCatalog.allSpecies.indexOfFirst { it.id == species.id }.coerceAtLeast(idx) + 1
         val progress = uiState.botanicalProgress[species.id]
         val isUnlocked = progress?.isUnlocked == true
+        val listenSeconds = progress?.listenSeconds ?: 0
         SpecimenGridCard(
           plateNumber = plateIdx,
           species = species,
           isUnlocked = isUnlocked,
+          listenSeconds = listenSeconds,
           onClick = { onInspectSpecies(species.id) }
         )
       }
@@ -241,22 +257,24 @@ private fun SpecimenGridCard(
   plateNumber: Int,
   species: BotanicalSpecies,
   isUnlocked: Boolean,
+  listenSeconds: Int,
   onClick: () -> Unit,
 ) {
+  val colors = LocalFloraColors.current
   val tint = if (isUnlocked) {
-    lerp(FloraPaperCard, species.primaryColor, 0.06f)
+    lerp(colors.paperCard, species.primaryColor, 0.08f)
   } else {
-    FloraPaperWarm.copy(alpha = 0.65f)
+    colors.paperWarm.copy(alpha = 0.65f)
   }
 
   FloraMountedPlate(
     shape = FloraPlateShape,
     containerColor = tint,
-    borderColor = if (isUnlocked) FloraBorderInk else FloraBorderInk.copy(alpha = 0.35f),
+    borderColor = if (isUnlocked) colors.borderInk else colors.borderInk.copy(alpha = 0.35f),
     goldHairline = isUnlocked,
     shadowOffsetX = 3.dp,
     shadowOffsetY = 4.dp,
-    shadowColor = FloraShadowPaper,
+    shadowColor = colors.shadowPaper,
     onClick = onClick,
     modifier = Modifier
       .fillMaxWidth()
@@ -271,20 +289,20 @@ private fun SpecimenGridCard(
         Text(
           text = "LÁM. %02d".format(plateNumber),
           style = MaterialTheme.typography.labelSmall,
-          color = if (isUnlocked) FloraTerracotta else FloraMetaGreen
+          color = if (isUnlocked) colors.terracotta else colors.metaGreen
         )
         if (!isUnlocked) {
           Icon(
             Icons.Filled.Lock,
             contentDescription = "Latente",
             modifier = Modifier.size(13.dp),
-            tint = FloraMetaGreen
+            tint = colors.metaGreen
           )
         } else {
           Text(
             text = species.associatedGenres.first().uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = FloraMetaGreen
+            color = colors.metaGreen
           )
         }
       }
@@ -294,8 +312,8 @@ private fun SpecimenGridCard(
           .fillMaxWidth()
           .aspectRatio(0.95f)
           .clip(FloraThumbShape)
-          .background(FloraPaper)
-          .border(1.dp, FloraBorderInk.copy(alpha = 0.5f), FloraThumbShape)
+          .background(colors.paper)
+          .border(1.dp, colors.borderInk.copy(alpha = 0.5f), FloraThumbShape)
       ) {
         BotanicalSpecimenIllustration(
           speciesId = species.id,
@@ -309,22 +327,29 @@ private fun SpecimenGridCard(
       Text(
         text = species.commonName,
         style = MaterialTheme.typography.titleMedium,
-        color = FloraInk,
+        color = colors.ink,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
       )
       Text(
         text = species.scientificName,
         style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
-        color = FloraMetaGreen,
+        color = colors.metaGreen,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
       )
-      if (!isUnlocked) {
+      if (listenSeconds > 0) {
+        Text(
+          text = "Cultivo: ${formatListenDuration(listenSeconds)}",
+          style = MaterialTheme.typography.labelSmall,
+          color = colors.terracotta,
+          maxLines = 1
+        )
+      } else if (!isUnlocked) {
         Text(
           text = species.unlockConditionLabel,
           style = MaterialTheme.typography.labelSmall,
-          color = FloraMetaGreen,
+          color = colors.metaGreen,
           maxLines = 2,
           overflow = TextOverflow.Ellipsis
         )
@@ -338,11 +363,13 @@ private fun BotanicalSpecimenFolioView(
   plateNumber: Int,
   species: BotanicalSpecies,
   isUnlocked: Boolean,
+  listenSeconds: Int,
   onBack: () -> Unit,
   onPlayAssociatedGenre: () -> Unit,
   onApplyPalette: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val colors = LocalFloraColors.current
   var selectedCallout by remember(species.id) {
     mutableStateOf<AnatomicalCallout?>(species.callouts.firstOrNull())
   }
@@ -364,7 +391,7 @@ private fun BotanicalSpecimenFolioView(
       Text(
         "LÁMINA %02d · ${species.family.uppercase()}".format(plateNumber),
         style = MaterialTheme.typography.labelMedium,
-        color = FloraTerracotta
+        color = colors.terracotta
       )
       IconButton(
         onClick = onBack,
@@ -372,7 +399,7 @@ private fun BotanicalSpecimenFolioView(
           .minimumInteractiveComponentSize()
           .testTag("close_specimen_folio")
       ) {
-        Icon(Icons.Filled.Close, contentDescription = "Cerrar", tint = FloraInk)
+        Icon(Icons.Filled.Close, contentDescription = "Cerrar", tint = colors.ink)
       }
     }
 
@@ -385,7 +412,7 @@ private fun BotanicalSpecimenFolioView(
         Text(
           species.commonName,
           style = MaterialTheme.typography.displayLarge.copy(fontSize = 34.sp, lineHeight = 36.sp),
-          color = FloraInk,
+          color = colors.ink,
           maxLines = 2,
           overflow = TextOverflow.Ellipsis
         )
@@ -393,7 +420,7 @@ private fun BotanicalSpecimenFolioView(
         Text(
           species.coordinates,
           style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
-          color = FloraMetaGreen
+          color = colors.metaGreen
         )
       }
       Spacer(modifier = Modifier.width(8.dp))
@@ -401,28 +428,28 @@ private fun BotanicalSpecimenFolioView(
         Text(
           species.scientificName,
           style = MaterialTheme.typography.titleSmall.copy(fontStyle = FontStyle.Italic),
-          color = FloraTerracotta,
+          color = colors.terracotta,
           textAlign = TextAlign.End
         )
         Text(
           species.nativeRegion,
           style = MaterialTheme.typography.bodySmall,
-          color = FloraMetaGreen,
+          color = colors.metaGreen,
           textAlign = TextAlign.End
         )
       }
     }
 
-    DottedRuleDivider(color = FloraBorderInk)
+    DottedRuleDivider(color = colors.borderInk)
 
     FloraMountedPlate(
       shape = FloraHeroShape,
-      containerColor = FloraPaperCard,
-      borderColor = FloraBorderInk,
+      containerColor = colors.paperCard,
+      borderColor = colors.borderInk,
       goldHairline = true,
       shadowOffsetX = 4.dp,
       shadowOffsetY = 5.dp,
-      shadowColor = FloraShadowPaper
+      shadowColor = colors.shadowPaper
     ) {
       Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -434,10 +461,10 @@ private fun BotanicalSpecimenFolioView(
             modifier = Modifier.width(106.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp)
           ) {
-            Text(species.soilPh, style = MaterialTheme.typography.labelSmall, color = FloraInk)
-            Text(species.heightSpec, style = MaterialTheme.typography.labelSmall, color = FloraInk)
-            Text(species.tempSpec, style = MaterialTheme.typography.labelSmall, color = FloraInk)
-            Text(species.humiditySpec, style = MaterialTheme.typography.labelSmall, color = FloraInk)
+            Text(species.soilPh, style = MaterialTheme.typography.labelSmall, color = colors.ink)
+            Text(species.heightSpec, style = MaterialTheme.typography.labelSmall, color = colors.ink)
+            Text(species.tempSpec, style = MaterialTheme.typography.labelSmall, color = colors.ink)
+            Text(species.humiditySpec, style = MaterialTheme.typography.labelSmall, color = colors.ink)
           }
 
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -459,8 +486,8 @@ private fun BotanicalSpecimenFolioView(
             .fillMaxWidth()
             .height(280.dp)
             .clip(FloraThumbShape)
-            .background(FloraPaper)
-            .border(1.dp, FloraBorderInk.copy(alpha = 0.65f), FloraThumbShape)
+            .background(colors.paper)
+            .border(1.dp, colors.borderInk.copy(alpha = 0.65f), FloraThumbShape)
             .padding(8.dp)
         ) {
           BotanicalSpecimenIllustration(
@@ -474,8 +501,8 @@ private fun BotanicalSpecimenFolioView(
           if (!isUnlocked) {
             Surface(
               shape = FloraStripShape,
-              color = FloraPaper.copy(alpha = 0.95f),
-              border = BorderStroke(1.dp, FloraBorderInk),
+              color = colors.paper.copy(alpha = 0.95f),
+              border = BorderStroke(1.dp, colors.borderInk),
               modifier = Modifier.align(Alignment.Center)
             ) {
               Column(
@@ -483,11 +510,11 @@ private fun BotanicalSpecimenFolioView(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp)
               ) {
-                Icon(Icons.Filled.Lock, contentDescription = null, tint = FloraTerracotta)
+                Icon(Icons.Filled.Lock, contentDescription = null, tint = colors.terracotta)
                 Text(
                   species.unlockConditionLabel,
                   style = MaterialTheme.typography.bodySmall,
-                  color = FloraInk,
+                  color = colors.ink,
                   textAlign = TextAlign.Center
                 )
               }
@@ -495,11 +522,22 @@ private fun BotanicalSpecimenFolioView(
           }
         }
 
-        Text(
-          species.associatedGenres.joinToString(" · "),
-          style = MaterialTheme.typography.labelSmall,
-          color = FloraTerracotta
-        )
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            species.associatedGenres.joinToString(" · "),
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.terracotta
+          )
+          Text(
+            "Cultivo: ${formatListenDuration(listenSeconds)}",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.metaGreen
+          )
+        }
       }
     }
 
@@ -507,8 +545,8 @@ private fun BotanicalSpecimenFolioView(
       val c = selectedCallout!!
       FloraMountedPlate(
         shape = FloraStripShape,
-        containerColor = FloraPaperWarm,
-        borderColor = FloraGold,
+        containerColor = colors.paperWarm,
+        borderColor = colors.gold,
         shadowOffsetX = 0.dp,
         shadowOffsetY = 0.dp
       ) {
@@ -521,17 +559,17 @@ private fun BotanicalSpecimenFolioView(
           Text(
             text = "${c.number}. ${c.label.uppercase()} — ${c.latinTerm}",
             style = MaterialTheme.typography.labelMedium,
-            color = FloraTerracotta
+            color = colors.terracotta
           )
-          Text(c.description, style = MaterialTheme.typography.bodyMedium, color = FloraInk)
+          Text(c.description, style = MaterialTheme.typography.bodyMedium, color = colors.ink)
         }
       }
     }
 
     FloraMountedPlate(
       shape = FloraStripShape,
-      containerColor = FloraPaperCard,
-      borderColor = FloraBorderInk.copy(alpha = 0.55f),
+      containerColor = colors.paperCard,
+      borderColor = colors.borderInk.copy(alpha = 0.55f),
       shadowOffsetX = 2.dp,
       shadowOffsetY = 3.dp
     ) {
@@ -539,17 +577,17 @@ private fun BotanicalSpecimenFolioView(
         modifier = Modifier.padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        Text(species.description, style = MaterialTheme.typography.bodyLarge, color = FloraInk)
-        DottedRuleDivider(color = FloraBorderInk.copy(alpha = 0.45f))
+        Text(species.description, style = MaterialTheme.typography.bodyLarge, color = colors.ink)
+        DottedRuleDivider(color = colors.borderInk.copy(alpha = 0.45f))
         Row(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-          Icon(Icons.Filled.LocalFlorist, contentDescription = null, tint = FloraTerracotta, modifier = Modifier.size(18.dp))
+          Icon(Icons.Filled.LocalFlorist, contentDescription = null, tint = colors.terracotta, modifier = Modifier.size(18.dp))
           Text(
             species.audioConnectionNote,
             style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
-            color = FloraMetaGreen
+            color = colors.metaGreen
           )
         }
       }
@@ -562,7 +600,7 @@ private fun BotanicalSpecimenFolioView(
       Button(
         onClick = onPlayAssociatedGenre,
         shape = FloraStripShape,
-        colors = ButtonDefaults.buttonColors(containerColor = FloraCobalt, contentColor = FloraPlayerCream),
+        colors = ButtonDefaults.buttonColors(containerColor = colors.cobalt, contentColor = FloraPlayerCream),
         modifier = Modifier
           .weight(1f)
           .testTag("play_species_genre_${species.id.id}")
@@ -574,12 +612,12 @@ private fun BotanicalSpecimenFolioView(
       OutlinedButton(
         onClick = onApplyPalette,
         shape = FloraStripShape,
-        border = BorderStroke(1.dp, FloraBorderInk),
+        border = BorderStroke(1.dp, colors.borderInk),
         modifier = Modifier.weight(1f)
       ) {
-        Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(18.dp))
+        Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(18.dp), tint = colors.ink)
         Spacer(modifier = Modifier.width(6.dp))
-        Text("Paleta", style = MaterialTheme.typography.labelLarge)
+        Text("Paleta", style = MaterialTheme.typography.labelLarge, color = colors.ink)
       }
     }
   }

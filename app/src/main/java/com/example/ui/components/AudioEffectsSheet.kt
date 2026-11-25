@@ -39,17 +39,11 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.AudioEffectsState
 import com.example.data.model.EqualizerPreset
 import com.example.data.model.PlaybackState
-import com.example.ui.theme.FloraBorderInk
 import com.example.ui.theme.FloraChipShape
-import com.example.ui.theme.FloraForest
-import com.example.ui.theme.FloraInk
-import com.example.ui.theme.FloraMetaGreen
-import com.example.ui.theme.FloraPaperCard
-import com.example.ui.theme.FloraPaperWarm
 import com.example.ui.theme.FloraPlayerCream
 import com.example.ui.theme.FloraStripShape
-import com.example.ui.theme.FloraTerracotta
 import com.example.ui.theme.FloraThumbShape
+import com.example.ui.theme.LocalFloraColors
 
 @Composable
 fun EqualizerOverlayScreen(
@@ -71,6 +65,7 @@ fun EqualizerOverlayScreen(
 ) {
   BackHandler(onBack = onDismiss)
   val track = playbackState.currentTrack
+  val colors = LocalFloraColors.current
 
   ParchmentBackground(chameleonEnabled = effectsState.chameleonThemeEnabled) {
     Column(
@@ -96,7 +91,7 @@ fun EqualizerOverlayScreen(
           Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowLeft,
             contentDescription = "Volver",
-            tint = FloraInk,
+            tint = colors.ink,
             modifier = Modifier.size(28.dp)
           )
         }
@@ -104,7 +99,7 @@ fun EqualizerOverlayScreen(
         Text(
           text = "Ecualizador",
           style = MaterialTheme.typography.displayLarge.copy(fontSize = 30.sp),
-          color = FloraInk
+          color = colors.ink
         )
 
         Switch(
@@ -112,9 +107,9 @@ fun EqualizerOverlayScreen(
           onCheckedChange = onToggleEqualizerEnabled,
           colors = SwitchDefaults.colors(
             checkedThumbColor = FloraPlayerCream,
-            checkedTrackColor = FloraForest,
-            uncheckedThumbColor = FloraInk,
-            uncheckedTrackColor = FloraPaperWarm
+            checkedTrackColor = colors.forest,
+            uncheckedThumbColor = colors.ink,
+            uncheckedTrackColor = colors.paperWarm
           ),
           modifier = Modifier.testTag("eq_master_switch")
         )
@@ -123,8 +118,8 @@ fun EqualizerOverlayScreen(
       if (track != null) {
         FloraMountedPlate(
           shape = FloraStripShape,
-          containerColor = FloraPaperWarm,
-          borderColor = FloraBorderInk.copy(alpha = 0.45f),
+          containerColor = colors.paperWarm,
+          borderColor = colors.borderInk.copy(alpha = 0.45f),
           shadowOffsetX = 0.dp,
           shadowOffsetY = 0.dp,
           modifier = Modifier.fillMaxWidth()
@@ -138,7 +133,7 @@ fun EqualizerOverlayScreen(
             AlbumArtFrame(
               track = track,
               customShape = FloraThumbShape,
-              borderColor = FloraBorderInk.copy(alpha = 0.65f),
+              borderColor = colors.borderInk.copy(alpha = 0.65f),
               modifier = Modifier.size(46.dp)
             )
             Spacer(modifier = Modifier.size(12.dp))
@@ -146,14 +141,14 @@ fun EqualizerOverlayScreen(
               Text(
                 text = track.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = FloraInk,
+                color = colors.ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
               )
               Text(
                 text = track.artist,
                 style = MaterialTheme.typography.bodySmall,
-                color = FloraMetaGreen,
+                color = colors.metaGreen,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
               )
@@ -165,7 +160,7 @@ fun EqualizerOverlayScreen(
               Icon(
                 imageVector = if (playbackState.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                 contentDescription = if (playbackState.isPlaying) "Pausar" else "Reproducir",
-                tint = FloraInk
+                tint = colors.ink
               )
             }
           }
@@ -182,11 +177,10 @@ fun EqualizerOverlayScreen(
         isPlaying = playbackState.isPlaying,
       )
 
-      // Gapless & Palette switches (concise labels only)
       FloraMountedPlate(
         shape = FloraStripShape,
-        containerColor = FloraPaperCard,
-        borderColor = FloraBorderInk.copy(alpha = 0.45f),
+        containerColor = colors.paperCard,
+        borderColor = colors.borderInk.copy(alpha = 0.45f),
         shadowOffsetX = 0.dp,
         shadowOffsetY = 0.dp,
         modifier = Modifier.fillMaxWidth()
@@ -197,39 +191,39 @@ fun EqualizerOverlayScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Text("Sin pausas (Gapless)", style = MaterialTheme.typography.titleSmall, color = FloraInk)
+            Text("Sin pausas (Gapless)", style = MaterialTheme.typography.titleSmall, color = colors.ink)
             Switch(
               checked = effectsState.gaplessEnabled,
               onCheckedChange = onGaplessToggle,
-              colors = SwitchDefaults.colors(checkedTrackColor = FloraForest, checkedThumbColor = FloraPlayerCream),
+              colors = SwitchDefaults.colors(checkedTrackColor = colors.forest, checkedThumbColor = FloraPlayerCream),
               modifier = Modifier.testTag("switch_gapless")
             )
           }
-          DottedRuleDivider(color = FloraBorderInk.copy(alpha = 0.4f))
+          DottedRuleDivider(color = colors.borderInk.copy(alpha = 0.4f))
           Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Text("Fundido cruzado", style = MaterialTheme.typography.titleSmall, color = FloraInk)
+            Text("Fundido cruzado", style = MaterialTheme.typography.titleSmall, color = colors.ink)
             Switch(
               checked = effectsState.crossfadeEnabled,
               onCheckedChange = onCrossfadeToggle,
-              colors = SwitchDefaults.colors(checkedTrackColor = FloraForest, checkedThumbColor = FloraPlayerCream),
+              colors = SwitchDefaults.colors(checkedTrackColor = colors.forest, checkedThumbColor = FloraPlayerCream),
               modifier = Modifier.testTag("switch_crossfade")
             )
           }
-          DottedRuleDivider(color = FloraBorderInk.copy(alpha = 0.4f))
+          DottedRuleDivider(color = colors.borderInk.copy(alpha = 0.4f))
           Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Text("Paleta por carátula", style = MaterialTheme.typography.titleSmall, color = FloraInk)
+            Text("Paleta por carátula", style = MaterialTheme.typography.titleSmall, color = colors.ink)
             Switch(
               checked = effectsState.chameleonThemeEnabled,
               onCheckedChange = onChameleonToggle,
-              colors = SwitchDefaults.colors(checkedTrackColor = FloraForest, checkedThumbColor = FloraPlayerCream),
+              colors = SwitchDefaults.colors(checkedTrackColor = colors.forest, checkedThumbColor = FloraPlayerCream),
               modifier = Modifier.testTag("switch_chameleon")
             )
           }
@@ -241,8 +235,8 @@ fun EqualizerOverlayScreen(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        Icon(Icons.Filled.Speed, contentDescription = null, tint = FloraTerracotta, modifier = Modifier.size(18.dp))
-        Text("Velocidad", style = MaterialTheme.typography.titleSmall, color = FloraInk)
+        Icon(Icons.Filled.Speed, contentDescription = null, tint = colors.terracotta, modifier = Modifier.size(18.dp))
+        Text("Velocidad", style = MaterialTheme.typography.titleSmall, color = colors.ink)
       }
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -255,7 +249,7 @@ fun EqualizerOverlayScreen(
             label = { Text("${spd}x", style = MaterialTheme.typography.labelLarge) },
             shape = FloraChipShape,
             colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = FloraTerracotta,
+              selectedContainerColor = colors.terracotta,
               selectedLabelColor = FloraPlayerCream
             ),
             modifier = Modifier.testTag("speed_chip_$spd")
@@ -268,13 +262,13 @@ fun EqualizerOverlayScreen(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        Icon(Icons.Filled.Timer, contentDescription = null, tint = FloraTerracotta, modifier = Modifier.size(18.dp))
+        Icon(Icons.Filled.Timer, contentDescription = null, tint = colors.terracotta, modifier = Modifier.size(18.dp))
         Text(
           text = effectsState.sleepTimerMinutesRemaining?.let {
             "Temporizador ($it min)"
           } ?: "Temporizador",
           style = MaterialTheme.typography.titleSmall,
-          color = FloraInk
+          color = colors.ink
         )
       }
       Row(
@@ -289,7 +283,7 @@ fun EqualizerOverlayScreen(
           label = { Text("No") },
           shape = FloraChipShape,
           colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = FloraTerracotta,
+            selectedContainerColor = colors.terracotta,
             selectedLabelColor = FloraPlayerCream
           )
         )
@@ -300,7 +294,7 @@ fun EqualizerOverlayScreen(
             label = { Text("$min min") },
             shape = FloraChipShape,
             colors = FilterChipDefaults.filterChipColors(
-              selectedContainerColor = FloraTerracotta,
+              selectedContainerColor = colors.terracotta,
               selectedLabelColor = FloraPlayerCream
             ),
             modifier = Modifier.testTag("sleep_timer_$min")

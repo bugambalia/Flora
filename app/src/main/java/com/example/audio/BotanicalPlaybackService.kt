@@ -3,6 +3,7 @@ package com.example.audio
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -16,12 +17,18 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.example.HerbariumApp
 import com.example.MainActivity
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 
 class BotanicalPlaybackService : MediaSessionService() {
   private var mediaSession: MediaSession? = null
-  val effectsController = AudioEffectsController()
+  private var playerRef: ExoPlayer? = null
+  private var crossfadeProcessorRef: CrossfadeAudioProcessor? = null
+  private val effectsController = AudioEffectsController()
   private var analyzerRef: AudioFrequencyAnalyzer? = null
 
   @OptIn(UnstableApi::class)
@@ -32,7 +39,7 @@ class BotanicalPlaybackService : MediaSessionService() {
     analyzerRef = analyzer
     val crossfadeProcessor = (application as? HerbariumApp)?.crossfadeAudioProcessor
       ?: CrossfadeAudioProcessor()
-    activeCrossfadeBridge = crossfadeProcessor
+    crossfadeProcessorRef = crossfadeProcessor
     val teeAudioProcessor = TeeAudioProcessor(analyzer.audioBufferSink)
 
     val renderersFactory = object : DefaultRenderersFactory(this) {
@@ -75,6 +82,7 @@ class BotanicalPlaybackService : MediaSessionService() {
       .apply {
         pauseAtEndOfMediaItems = false // True gapless playback across consecutive queue items
       }
+    playerRef = player
 
     player.addListener(object : Player.Listener {
       override fun onAudioSessionIdChanged(audioSessionId: Int) {
@@ -98,12 +106,73 @@ class BotanicalPlaybackService : MediaSessionService() {
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 
+    val sessionCallback = object : MediaSession.Callback {
+      override fun onConnect(
+        session: MediaSession,
+        controller: MediaSession.ControllerInfo,
+      ): MediaSession.ConnectionResult {
+        val base = super.onConnect(session, controller)
+        if (controller.packageName != packageName) {
+          return base
+        }
+        val commands = base.availableSessionCommands.buildUpon().apply {
+          CUSTOM_COMMANDS.forEach { action ->
+            add(SessionCommand(action, Bundle.EMPTY))
+          }
+        }.build()
+        return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+          .setAvailableSessionCommands(commands)
+          .setAvailablePlayerCommands(base.availablePlayerCommands)
+          .build()
+      }
+
+      override fun onCustomCommand(
+        session: MediaSession,
+        controller: MediaSession.ControllerInfo,
+        customCommand: SessionCommand,
+        args: Bundle,
+      ): ListenableFuture<SessionResult> {
+        if (controller.packageName != packageName) {
+          return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_PERMISSION_DENIED))
+        }
+        when (customCommand.customAction) {
+          COMMAND_SET_GAPLESS -> {
+            val enabled = args.getBoolean(EXTRA_ENABLED, true)
+            playerRef?.pauseAtEndOfMediaItems = !enabled
+          }
+          COMMAND_SET_CROSSFADE -> {
+            crossfadeProcessorRef?.isEnabled = args.getBoolean(EXTRA_ENABLED, true)
+          }
+          COMMAND_ARM_CROSSFADE -> {
+            val durationMs = args.getLong(EXTRA_DURATION_MS, CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS)
+            crossfadeProcessorRef?.armCrossfade(durationMs)
+          }
+          COMMAND_SET_EQ_ENABLED -> {
+            effectsController.setEqualizerEnabled(args.getBoolean(EXTRA_ENABLED, true))
+          }
+          COMMAND_SET_EQ_BANDS -> {
+            args.getIntArray(EXTRA_BANDS)?.let { bands ->
+              effectsController.applyBands(bands.toList())
+            }
+          }
+          COMMAND_SET_BASS_BOOST -> {
+            effectsController.applyBassBoost(args.getInt(EXTRA_STRENGTH, 0))
+          }
+          COMMAND_SET_VIRTUALIZER -> {
+            effectsController.applyVirtualizer(args.getInt(EXTRA_STRENGTH, 0))
+          }
+          else -> {
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+          }
+        }
+        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+      }
+    }
+
     mediaSession = MediaSession.Builder(this, player)
       .setSessionActivity(openAppIntent)
+      .setCallback(sessionCallback)
       .build()
-
-    activeEffectsBridge = effectsController
-    activePlayerBridge = player
   }
 
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
@@ -119,9 +188,8 @@ class BotanicalPlaybackService : MediaSessionService() {
   override fun onDestroy() {
     analyzerRef?.onPlaybackPaused()
     analyzerRef = null
-    activeCrossfadeBridge = null
-    activeEffectsBridge = null
-    activePlayerBridge = null
+    crossfadeProcessorRef = null
+    playerRef = null
     effectsController.release()
     mediaSession?.run {
       player.release()
@@ -132,25 +200,27 @@ class BotanicalPlaybackService : MediaSessionService() {
   }
 
   companion object {
-    @Volatile
-    var activeEffectsBridge: AudioEffectsController? = null
+    const val COMMAND_SET_GAPLESS = "com.example.audio.SET_GAPLESS"
+    const val COMMAND_SET_CROSSFADE = "com.example.audio.SET_CROSSFADE"
+    const val COMMAND_ARM_CROSSFADE = "com.example.audio.ARM_CROSSFADE"
+    const val COMMAND_SET_EQ_ENABLED = "com.example.audio.SET_EQ_ENABLED"
+    const val COMMAND_SET_EQ_BANDS = "com.example.audio.SET_EQ_BANDS"
+    const val COMMAND_SET_BASS_BOOST = "com.example.audio.SET_BASS_BOOST"
+    const val COMMAND_SET_VIRTUALIZER = "com.example.audio.SET_VIRTUALIZER"
 
-    @Volatile
-    var activePlayerBridge: ExoPlayer? = null
+    const val EXTRA_ENABLED = "extra_enabled"
+    const val EXTRA_DURATION_MS = "extra_duration_ms"
+    const val EXTRA_BANDS = "extra_bands"
+    const val EXTRA_STRENGTH = "extra_strength"
 
-    @Volatile
-    var activeCrossfadeBridge: CrossfadeAudioProcessor? = null
-
-    fun setGaplessPlayback(enabled: Boolean) {
-      activePlayerBridge?.pauseAtEndOfMediaItems = !enabled
-    }
-
-    fun setCrossfadeEnabled(enabled: Boolean) {
-      activeCrossfadeBridge?.isEnabled = enabled
-    }
-
-    fun armCrossfade(durationMs: Long = CrossfadeAudioProcessor.DEFAULT_CROSSFADE_MS) {
-      activeCrossfadeBridge?.armCrossfade(durationMs)
-    }
+    private val CUSTOM_COMMANDS = listOf(
+      COMMAND_SET_GAPLESS,
+      COMMAND_SET_CROSSFADE,
+      COMMAND_ARM_CROSSFADE,
+      COMMAND_SET_EQ_ENABLED,
+      COMMAND_SET_EQ_BANDS,
+      COMMAND_SET_BASS_BOOST,
+      COMMAND_SET_VIRTUALIZER,
+    )
   }
 }

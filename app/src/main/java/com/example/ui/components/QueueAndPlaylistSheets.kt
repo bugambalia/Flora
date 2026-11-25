@@ -57,17 +57,11 @@ import com.example.data.model.BotanicalCatalog
 import com.example.data.model.BotanicalSpeciesId
 import com.example.data.model.PlaybackState
 import com.example.data.model.PlaylistWithTracks
-import com.example.ui.theme.FloraBorderInk
 import com.example.ui.theme.FloraChipShape
-import com.example.ui.theme.FloraCobalt
-import com.example.ui.theme.FloraInk
-import com.example.ui.theme.FloraMetaGreen
-import com.example.ui.theme.FloraPaper
-import com.example.ui.theme.FloraPaperCard
 import com.example.ui.theme.FloraPlayerCream
 import com.example.ui.theme.FloraStripShape
-import com.example.ui.theme.FloraTerracotta
 import com.example.ui.theme.FloraThumbShape
+import com.example.ui.theme.LocalFloraColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,9 +72,10 @@ fun UpNextQueueSheet(
   onRemoveItem: (Int) -> Unit,
   onDismiss: () -> Unit,
 ) {
+  val colors = LocalFloraColors.current
   ModalBottomSheet(
     onDismissRequest = onDismiss,
-    containerColor = FloraPaper
+    containerColor = colors.paper
   ) {
     Column(
       modifier = Modifier
@@ -93,8 +88,8 @@ fun UpNextQueueSheet(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
       ) {
-        Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = FloraTerracotta)
-        Text("Cola (${playbackState.queue.size})", style = MaterialTheme.typography.headlineMedium, color = FloraInk)
+        Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = colors.terracotta)
+        Text("Cola (${playbackState.queue.size})", style = MaterialTheme.typography.headlineMedium, color = colors.ink)
       }
 
       Spacer(modifier = Modifier.height(12.dp))
@@ -115,10 +110,10 @@ fun UpNextQueueSheet(
             val isCurrent = index == playbackState.currentIndex
             Surface(
               shape = FloraStripShape,
-              color = if (isCurrent) Color(0xFFEBD9B3) else FloraPaperCard,
+              color = if (isCurrent) colors.currentHighlight else colors.paperCard,
               border = BorderStroke(
                 width = 1.dp,
-                color = if (isCurrent) FloraTerracotta else FloraBorderInk.copy(alpha = 0.45f)
+                color = if (isCurrent) colors.terracotta else colors.borderInk.copy(alpha = 0.45f)
               ),
               modifier = Modifier
                 .fillMaxWidth()
@@ -138,12 +133,12 @@ fun UpNextQueueSheet(
                 Column(modifier = Modifier.weight(1f)) {
                   Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (isCurrent) {
-                      Icon(Icons.Filled.GraphicEq, contentDescription = "Sonando", tint = FloraTerracotta, modifier = Modifier.size(16.dp))
+                      Icon(Icons.Filled.GraphicEq, contentDescription = "Sonando", tint = colors.terracotta, modifier = Modifier.size(16.dp))
                     }
                     Text(
                       track.title,
                       style = MaterialTheme.typography.titleMedium,
-                      color = FloraInk,
+                      color = colors.ink,
                       maxLines = 1,
                       overflow = TextOverflow.Ellipsis
                     )
@@ -151,7 +146,7 @@ fun UpNextQueueSheet(
                   Text(
                     track.artist,
                     style = MaterialTheme.typography.bodySmall,
-                    color = FloraMetaGreen,
+                    color = colors.metaGreen,
                     maxLines = 1
                   )
                 }
@@ -160,21 +155,21 @@ fun UpNextQueueSheet(
                   enabled = index > 0,
                   modifier = Modifier.minimumInteractiveComponentSize()
                 ) {
-                  Icon(Icons.Filled.ArrowUpward, contentDescription = "Subir")
+                  Icon(Icons.Filled.ArrowUpward, contentDescription = "Subir", tint = colors.ink)
                 }
                 IconButton(
                   onClick = { if (index < playbackState.queue.lastIndex) onMoveItem(index, index + 1) },
                   enabled = index < playbackState.queue.lastIndex,
                   modifier = Modifier.minimumInteractiveComponentSize()
                 ) {
-                  Icon(Icons.Filled.ArrowDownward, contentDescription = "Bajar")
+                  Icon(Icons.Filled.ArrowDownward, contentDescription = "Bajar", tint = colors.ink)
                 }
                 if (playbackState.queue.size > 1) {
                   IconButton(
                     onClick = { onRemoveItem(index) },
                     modifier = Modifier.minimumInteractiveComponentSize()
                   ) {
-                    Icon(Icons.Filled.Close, contentDescription = "Quitar")
+                    Icon(Icons.Filled.Close, contentDescription = "Quitar", tint = colors.ink)
                   }
                 }
               }
@@ -195,9 +190,10 @@ fun AddToPlaylistSheet(
   onRequestNewPlaylist: () -> Unit,
   onDismiss: () -> Unit,
 ) {
+  val colors = LocalFloraColors.current
   ModalBottomSheet(
     onDismissRequest = onDismiss,
-    containerColor = FloraPaper
+    containerColor = colors.paper
   ) {
     Column(
       modifier = Modifier
@@ -208,8 +204,8 @@ fun AddToPlaylistSheet(
       verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, tint = FloraTerracotta)
-        Text("Colección", style = MaterialTheme.typography.headlineMedium, color = FloraInk)
+        Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, tint = colors.terracotta)
+        Text("Colección", style = MaterialTheme.typography.headlineMedium, color = colors.ink)
       }
 
       OutlinedButton(
@@ -218,22 +214,22 @@ fun AddToPlaylistSheet(
           onRequestNewPlaylist()
         },
         shape = FloraStripShape,
-        border = BorderStroke(1.dp, FloraBorderInk),
+        border = BorderStroke(1.dp, colors.borderInk),
         modifier = Modifier
           .fillMaxWidth()
           .testTag("create_playlist_from_sheet")
       ) {
-        Icon(Icons.Filled.Add, contentDescription = null)
+        Icon(Icons.Filled.Add, contentDescription = null, tint = colors.ink)
         Spacer(modifier = Modifier.width(8.dp))
-        Text("Nueva colección", style = MaterialTheme.typography.labelLarge)
+        Text("Nueva colección", style = MaterialTheme.typography.labelLarge, color = colors.ink)
       }
 
       playlists.forEach { item ->
         val alreadyIn = item.tracks.any { it.id == track.id }
         Surface(
           shape = FloraStripShape,
-          color = FloraPaperCard,
-          border = BorderStroke(1.dp, FloraBorderInk.copy(alpha = 0.45f)),
+          color = colors.paperCard,
+          border = BorderStroke(1.dp, colors.borderInk.copy(alpha = 0.45f)),
           modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = !alreadyIn) {
@@ -252,17 +248,17 @@ fun AddToPlaylistSheet(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-              Text(item.playlist.name, style = MaterialTheme.typography.titleMedium, color = FloraInk)
+              Text(item.playlist.name, style = MaterialTheme.typography.titleMedium, color = colors.ink)
               Text(
                 "${item.tracks.size} pistas",
                 style = MaterialTheme.typography.bodySmall,
-                color = FloraMetaGreen
+                color = colors.metaGreen
               )
             }
             Text(
               text = if (alreadyIn) "Incluida" else "Añadir",
               style = MaterialTheme.typography.labelLarge,
-              color = if (alreadyIn) FloraMetaGreen else FloraTerracotta
+              color = if (alreadyIn) colors.metaGreen else colors.terracotta
             )
           }
         }
@@ -280,18 +276,19 @@ fun CreateOrEditPlaylistDialog(
   onConfirm: (String, String, BotanicalSpeciesId) -> Unit,
   onDismiss: () -> Unit,
 ) {
+  val colors = LocalFloraColors.current
   var name by remember { mutableStateOf(initialName) }
   var description by remember { mutableStateOf(initialDescription) }
   var motif by remember { mutableStateOf(initialMotif) }
 
   AlertDialog(
     onDismissRequest = onDismiss,
-    containerColor = FloraPaper,
+    containerColor = colors.paper,
     title = {
       Text(
         text = if (isEditing) "Editar colección" else "Nueva colección",
         style = MaterialTheme.typography.headlineMedium,
-        color = FloraInk
+        color = colors.ink
       )
     },
     text = {
@@ -314,7 +311,7 @@ fun CreateOrEditPlaylistDialog(
             .fillMaxWidth()
             .testTag("playlist_desc_input")
         )
-        Text("Emblema", style = MaterialTheme.typography.labelLarge, color = FloraInk)
+        Text("Emblema", style = MaterialTheme.typography.labelLarge, color = colors.ink)
         Row(
           modifier = Modifier
             .fillMaxWidth()
@@ -328,7 +325,7 @@ fun CreateOrEditPlaylistDialog(
               label = { Text(species.commonName) },
               shape = FloraChipShape,
               colors = FilterChipDefaults.filterChipColors(
-                selectedContainerColor = FloraTerracotta,
+                selectedContainerColor = colors.terracotta,
                 selectedLabelColor = FloraPlayerCream
               ),
               leadingIcon = {
@@ -347,14 +344,14 @@ fun CreateOrEditPlaylistDialog(
         onClick = { if (name.isNotBlank()) onConfirm(name, description, motif) },
         enabled = name.isNotBlank(),
         shape = FloraStripShape,
-        colors = ButtonDefaults.buttonColors(containerColor = FloraCobalt, contentColor = FloraPlayerCream),
+        colors = ButtonDefaults.buttonColors(containerColor = colors.cobalt, contentColor = FloraPlayerCream),
         modifier = Modifier.testTag("confirm_playlist_button")
       ) {
         Text(if (isEditing) "Guardar" else "Crear", style = MaterialTheme.typography.labelLarge)
       }
     },
     dismissButton = {
-      TextButton(onClick = onDismiss) { Text("Cancelar", color = FloraInk) }
+      TextButton(onClick = onDismiss) { Text("Cancelar", color = colors.ink) }
     }
   )
 }

@@ -33,6 +33,8 @@ data class ScannedAudioCandidate(
   val bitrateKbps: Int = 192,
   val sampleRateHz: Int = 44100,
   val codec: String = "AUDIO",
+  val albumId: Long? = null,
+  val hasCompleteMediaStoreMetadata: Boolean = false,
 )
 
 @Immutable
@@ -310,11 +312,16 @@ object AudioFolderScanner {
       add(MediaStore.Audio.Media.TITLE)
       add(MediaStore.Audio.Media.ARTIST)
       add(MediaStore.Audio.Media.ALBUM)
+      add(MediaStore.Audio.Media.ALBUM_ID)
       add(MediaStore.Audio.Media.DURATION)
       add(MediaStore.Audio.Media.MIME_TYPE)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         add(MediaStore.Audio.Media.RELATIVE_PATH)
         add(MediaStore.Audio.Media.BUCKET_DISPLAY_NAME)
+      }
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        add(MediaStore.Audio.Media.GENRE)
+        add(MediaStore.Audio.Media.BITRATE)
       }
     }.toTypedArray()
 
@@ -331,6 +338,7 @@ object AudioFolderScanner {
         val titleCol = cursor.getColumnIndex(MediaStore.Audio.Media.TITLE)
         val artistCol = cursor.getColumnIndex(MediaStore.Audio.Media.ARTIST)
         val albumCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM)
+        val albumIdCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
         val durCol = cursor.getColumnIndex(MediaStore.Audio.Media.DURATION)
         val mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
         val relPathCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -339,6 +347,12 @@ object AudioFolderScanner {
         val bucketCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
           cursor.getColumnIndex(MediaStore.Audio.Media.BUCKET_DISPLAY_NAME)
         } else -1
+        val genreCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+          cursor.getColumnIndex(MediaStore.Audio.Media.GENRE)
+        } else -1
+        val bitrateCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+          cursor.getColumnIndex(MediaStore.Audio.Media.BITRATE)
+        } else -1
 
         while (cursor.moveToNext()) {
           if (idCol < 0) continue
@@ -346,16 +360,24 @@ object AudioFolderScanner {
           val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
           val displayName = (if (nameCol >= 0) cursor.getString(nameCol) else null) ?: "Pista"
           val title = (if (titleCol >= 0) cursor.getString(titleCol) else null)?.takeIf { it.isNotBlank() }
-          val artist = (if (artistCol >= 0) cursor.getString(artistCol) else null)?.takeIf { it.isNotBlank() && it != "<unknown>" }
-          val album = (if (albumCol >= 0) cursor.getString(albumCol) else null)?.takeIf { it.isNotBlank() }
+          val artist = (if (artistCol >= 0) cursor.getString(artistCol) else null)
+            ?.takeIf { it.isNotBlank() && it != "<unknown>" }
+          val album = (if (albumCol >= 0) cursor.getString(albumCol) else null)
+            ?.takeIf { it.isNotBlank() && it != "<unknown>" }
+          val albumId = if (albumIdCol >= 0 && !cursor.isNull(albumIdCol)) cursor.getLong(albumIdCol) else null
           val duration = if (durCol >= 0) cursor.getLong(durCol) else 0L
           val mime = if (mimeCol >= 0) cursor.getString(mimeCol) ?: "" else ""
           val relPath = if (relPathCol >= 0) cursor.getString(relPathCol) ?: "" else ""
           val bucket = if (bucketCol >= 0) cursor.getString(bucketCol) ?: "" else ""
+          val genre = if (genreCol >= 0) cursor.getString(genreCol)?.takeIf { it.isNotBlank() } else null
+          val rawBps = if (bitrateCol >= 0 && !cursor.isNull(bitrateCol)) cursor.getInt(bitrateCol) else 0
+          val bitrateKbps = if (rawBps > 0) (rawBps / 1000).coerceAtLeast(64) else 192
           val folderName = bucket.ifBlank {
             relPath.trimEnd('/').substringAfterLast('/').ifBlank { "MediaStore" }
           }
           val folderKey = relPath.ifBlank { "mediastore://$folderName" }
+          val codec = guessCodecFromNameOrMime(displayName, mime)
+          val complete = title != null && artist != null && duration > 0L
 
           results += ScannedAudioCandidate(
             uri = contentUri.toString(),
@@ -366,7 +388,11 @@ object AudioFolderScanner {
             title = title,
             artist = artist,
             album = album,
-            codec = guessCodecFromNameOrMime(displayName, mime),
+            genre = genre,
+            bitrateKbps = bitrateKbps,
+            codec = codec,
+            albumId = albumId,
+            hasCompleteMediaStoreMetadata = complete,
           )
         }
       }

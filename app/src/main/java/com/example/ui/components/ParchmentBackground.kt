@@ -18,6 +18,7 @@ import com.example.ui.theme.FloraGold
 import com.example.ui.theme.FloraInk
 import com.example.ui.theme.FloraSage
 import com.example.ui.theme.LocalAlbumPalette
+import com.example.ui.theme.LocalFloraColors
 import com.example.ui.theme.LocalThemeGradients
 
 @Composable
@@ -29,7 +30,8 @@ fun ParchmentBackground(
 ) {
   val palette = LocalAlbumPalette.current
   val gradients = LocalThemeGradients.current
-  val baseBg = MaterialTheme.colorScheme.background
+  val floraColors = LocalFloraColors.current
+  val baseBg = floraColors.paper
 
   Box(
     modifier = modifier
@@ -44,12 +46,12 @@ fun ParchmentBackground(
             )
           )
         } else {
-          Brush.verticalGradient(colors = listOf(baseBg, baseBg))
+          Brush.verticalGradient(colors = listOf(baseBg, floraColors.surfaceBgBottom))
         }
 
         val primaryRadial = Brush.radialGradient(
           colors = listOf(
-            if (chameleonEnabled) gradients.parchmentRadialSecondary else FloraGold.copy(alpha = 0.06f),
+            if (chameleonEnabled) gradients.parchmentRadialSecondary else floraColors.gold.copy(alpha = 0.06f),
             Color.Transparent
           ),
           center = Offset(size.width * 0.16f, size.height * 0.14f),
@@ -82,8 +84,8 @@ fun ParchmentBackground(
           )
         }
         val stemStroke = Stroke(width = 1.5.dp.toPx())
-        val stemColor = FloraSage.copy(alpha = 0.07f)
-        val dotColor = FloraInk.copy(alpha = 0.08f)
+        val stemColor = floraColors.sage.copy(alpha = 0.09f)
+        val dotColor = floraColors.ink.copy(alpha = 0.08f)
         val dotSpacing = 22.dp.toPx()
 
         onDrawBehind {

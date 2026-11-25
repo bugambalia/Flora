@@ -17,6 +17,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +28,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +38,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.MoreVert
@@ -42,12 +50,16 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +73,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,6 +84,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -81,13 +95,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.audio.BotanicalAudioSpectrum
+import com.example.audio.LyricsLine
+import com.example.audio.LyricsParser
+import com.example.audio.ParsedLyrics
 import com.example.data.model.AudioTrack
 import com.example.data.model.BotanicalCatalog
 import com.example.data.model.BotanicalLyricsCatalog
 import com.example.data.model.BotanicalPlayerTheme
 import com.example.data.model.BotanicalSpeciesId
 import com.example.data.model.RepeatModeOption
-import com.example.ui.components.AlbumArtFrame
 import com.example.ui.components.BotanicalDissolveArtworkLayer
 import com.example.ui.components.BotanicalFrequencyVisualizer
 import com.example.ui.components.BotanicalSpecimenIllustration
@@ -99,6 +115,7 @@ import com.example.ui.theme.FloraGoldSoft
 import com.example.ui.theme.FloraInk
 import com.example.ui.theme.FloraLyricIdle
 import com.example.ui.theme.FloraPlayerCream
+import com.example.ui.theme.FloraStripShape
 import com.example.ui.theme.FloraTerracotta
 import com.example.ui.theme.LocalAlbumPalette
 import com.example.ui.theme.LocalThemeGradients
@@ -126,6 +143,12 @@ fun NowPlayingScreen(
   onAddToPlaylist: (AudioTrack) -> Unit,
   onInspectSpecies: (BotanicalSpeciesId) -> Unit,
   onSelectPlayerTheme: (String) -> Unit,
+  onDismissPlaybackError: () -> Unit = {},
+  onShowTrackDetails: (AudioTrack) -> Unit = {},
+  onEditTrackMetadata: (AudioTrack) -> Unit = {},
+  onShareTrack: (AudioTrack) -> Unit = {},
+  onEditLyrics: (AudioTrack, String) -> Unit = { _, _ -> },
+  onImportLrcFile: (AudioTrack) -> Unit = {},
 ) {
   BackHandler(onBack = onClose)
 
@@ -185,10 +208,6 @@ fun NowPlayingScreen(
   var showTrackMenu by remember { mutableStateOf(false) }
 
   val durationMs = playback.durationMs.coerceAtLeast(1L)
-
-  val verses = remember(track?.id, track?.speciesId) {
-    BotanicalLyricsCatalog.getLyricsForTrack(track)
-  }
 
   Box(
     modifier = Modifier
@@ -323,6 +342,44 @@ fun NowPlayingScreen(
               contentDescription = "Ecualizador",
               tint = FloraPlayerCream
             )
+          }
+        }
+      }
+
+      AnimatedVisibility(
+        visible = !playback.errorMessage.isNullOrBlank(),
+        enter = expandVertically(),
+        exit = shrinkVertically()
+      ) {
+        Surface(
+          shape = FloraStripShape,
+          color = FloraTerracotta.copy(alpha = 0.90f),
+          border = BorderStroke(1.dp, FloraGoldSoft.copy(alpha = 0.7f)),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .testTag("now_playing_error_banner")
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = FloraPlayerCream, modifier = Modifier.size(18.dp))
+            Text(
+              text = playback.errorMessage.orEmpty(),
+              style = MaterialTheme.typography.bodySmall,
+              color = FloraPlayerCream,
+              modifier = Modifier.weight(1f),
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis
+            )
+            IconButton(
+              onClick = onDismissPlaybackError,
+              modifier = Modifier.size(28.dp)
+            ) {
+              Icon(Icons.Filled.Close, contentDescription = "Cerrar aviso", tint = FloraPlayerCream, modifier = Modifier.size(16.dp))
+            }
           }
         }
       }
@@ -463,6 +520,31 @@ fun NowPlayingScreen(
                         onInspectSpecies(species.id)
                       }
                     )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                      text = { Text("Ficha técnica") },
+                      leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                      onClick = {
+                        showTrackMenu = false
+                        track?.let(onShowTrackDetails)
+                      }
+                    )
+                    DropdownMenuItem(
+                      text = { Text("Editar etiquetas") },
+                      leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                      onClick = {
+                        showTrackMenu = false
+                        track?.let(onEditTrackMetadata)
+                      }
+                    )
+                    DropdownMenuItem(
+                      text = { Text("Compartir") },
+                      leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                      onClick = {
+                        showTrackMenu = false
+                        track?.let(onShareTrack)
+                      }
+                    )
                   }
                 }
               }
@@ -470,10 +552,12 @@ fun NowPlayingScreen(
           }
         } else {
           NowPlayingLyricsList(
-            verses = verses,
+            track = track,
             positionMsFlow = positionMsFlow,
             durationMs = durationMs,
             onSeekTo = onSeekTo,
+            onEditLyrics = onEditLyrics,
+            onImportLrcFile = onImportLrcFile,
           )
         }
       }
@@ -522,22 +606,33 @@ fun NowPlayingScreen(
           )
         }
 
-        Surface(
-          shape = CircleShape,
-          color = FloraGoldSoft,
-          border = BorderStroke(1.5.dp, FloraPlayerCream),
-          modifier = Modifier
-            .size(66.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onTogglePlayPause)
-            .testTag("now_playing_play_pause")
-        ) {
-          Box(contentAlignment = Alignment.Center) {
-            Icon(
-              imageVector = if (playback.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-              contentDescription = if (playback.isPlaying) "Pausar" else "Reproducir",
-              tint = FloraInk,
-              modifier = Modifier.size(32.dp)
+        Box(contentAlignment = Alignment.Center) {
+          Surface(
+            shape = CircleShape,
+            color = FloraGoldSoft,
+            border = BorderStroke(1.5.dp, FloraPlayerCream),
+            modifier = Modifier
+              .size(66.dp)
+              .clip(CircleShape)
+              .clickable(onClick = onTogglePlayPause)
+              .testTag("now_playing_play_pause")
+          ) {
+            Box(contentAlignment = Alignment.Center) {
+              Icon(
+                imageVector = if (playback.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (playback.isPlaying) "Pausar" else "Reproducir",
+                tint = FloraInk,
+                modifier = Modifier.size(32.dp)
+              )
+            }
+          }
+          if (playback.isBuffering) {
+            CircularProgressIndicator(
+              color = FloraPlayerCream,
+              strokeWidth = 2.5.dp,
+              modifier = Modifier
+                .size(76.dp)
+                .testTag("now_playing_buffering")
             )
           }
         }
@@ -634,51 +729,150 @@ private fun NowPlayingSeekBarSection(
 
 @Composable
 private fun NowPlayingLyricsList(
-  verses: List<String>,
+  track: AudioTrack?,
   positionMsFlow: StateFlow<Long>,
   durationMs: Long,
   onSeekTo: (Long) -> Unit,
+  onEditLyrics: (AudioTrack, String) -> Unit,
+  onImportLrcFile: (AudioTrack) -> Unit,
 ) {
+  val context = LocalContext.current
   val livePositionMs by positionMsFlow.collectAsStateWithLifecycle()
-  val progressFraction = (livePositionMs.coerceIn(0L, durationMs).toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-  val activeVerseIndex = if (verses.isEmpty()) 0 else (progressFraction * verses.size).toInt().coerceIn(0, verses.lastIndex)
+
+  val parsedLyrics by produceState(
+    initialValue = ParsedLyrics(
+      lines = BotanicalLyricsCatalog.getLyricsForTrack(track).map { LyricsLine(null, it) },
+      isSynced = false,
+      isBotanicalFallback = true,
+      sourceLabel = "Versos del Herbario",
+    ),
+    key1 = track?.id,
+    key2 = track?.lyrics,
+    key3 = track?.uri,
+  ) {
+    value = LyricsParser.resolveTrackLyrics(context, track)
+  }
+
+  val activeVerseIndex = remember(parsedLyrics, livePositionMs, durationMs) {
+    LyricsParser.findActiveLineIndex(parsedLyrics, livePositionMs, durationMs)
+  }
+  val lyricsListState = rememberLazyListState()
+
+  LaunchedEffect(activeVerseIndex, parsedLyrics.lines.size) {
+    if (parsedLyrics.lines.isNotEmpty() && activeVerseIndex in parsedLyrics.lines.indices) {
+      val target = (activeVerseIndex - 1).coerceAtLeast(0)
+      lyricsListState.animateScrollToItem(target)
+    }
+  }
 
   Column(
     modifier = Modifier
       .fillMaxSize()
-      .verticalScroll(rememberScrollState())
-      .padding(top = 12.dp, bottom = 12.dp),
-    verticalArrangement = Arrangement.spacedBy(18.dp)
+      .padding(top = 8.dp)
   ) {
-    verses.forEachIndexed { idx, line ->
-      val isActive = idx == activeVerseIndex
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .clip(FloraChipShape)
-          .clickable {
-            val seekTarget = (durationMs * idx / verses.size.coerceAtLeast(1))
-            onSeekTo(seekTarget)
-          }
-          .padding(vertical = 4.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.Top
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(bottom = 8.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Surface(
+        shape = FloraChipShape,
+        color = Color.Black.copy(alpha = 0.28f),
+        border = BorderStroke(1.dp, FloraGoldSoft.copy(alpha = 0.45f))
       ) {
-        Box(
-          modifier = Modifier
-            .padding(top = 11.dp, end = 10.dp)
-            .size(width = 4.dp, height = if (isActive) 18.dp else 6.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(if (isActive) FloraGoldSoft else Color.Transparent)
-        )
         Text(
-          text = line,
-          style = MaterialTheme.typography.titleLarge.copy(
-            fontSize = 20.sp,
-            lineHeight = 29.sp,
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
-          ),
-          color = if (isActive) FloraPlayerCream else FloraLyricIdle.copy(alpha = 0.84f)
+          text = parsedLyrics.sourceLabel,
+          style = MaterialTheme.typography.labelSmall,
+          color = FloraGoldSoft,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
         )
+      }
+
+      if (track != null) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+          Surface(
+            shape = FloraChipShape,
+            color = Color.Black.copy(alpha = 0.28f),
+            border = BorderStroke(1.dp, FloraPlayerCream.copy(alpha = 0.35f)),
+            modifier = Modifier
+              .clip(FloraChipShape)
+              .clickable { onImportLrcFile(track) }
+              .testTag("lyrics_import_lrc_button")
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              Icon(Icons.Filled.UploadFile, contentDescription = null, tint = FloraPlayerCream, modifier = Modifier.size(14.dp))
+              Text(".lrc", style = MaterialTheme.typography.labelSmall, color = FloraPlayerCream)
+            }
+          }
+          Surface(
+            shape = FloraChipShape,
+            color = Color.Black.copy(alpha = 0.28f),
+            border = BorderStroke(1.dp, FloraPlayerCream.copy(alpha = 0.35f)),
+            modifier = Modifier
+              .clip(FloraChipShape)
+              .clickable {
+                val seedText = track.lyrics ?: parsedLyrics.lines.joinToString("\n") { it.text }
+                onEditLyrics(track, seedText)
+              }
+              .testTag("lyrics_edit_button")
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              Icon(Icons.Filled.Edit, contentDescription = null, tint = FloraPlayerCream, modifier = Modifier.size(14.dp))
+              Text("Editar", style = MaterialTheme.typography.labelSmall, color = FloraPlayerCream)
+            }
+          }
+        }
+      }
+    }
+
+    LazyColumn(
+      state = lyricsListState,
+      modifier = Modifier.weight(1f),
+      contentPadding = PaddingValues(vertical = 10.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+      itemsIndexed(parsedLyrics.lines) { idx, line ->
+        val isActive = idx == activeVerseIndex
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(FloraChipShape)
+            .clickable {
+              val seekTarget = line.timestampMs ?: (durationMs * idx / parsedLyrics.lines.size.coerceAtLeast(1))
+              onSeekTo(seekTarget)
+            }
+            .padding(vertical = 4.dp, horizontal = 4.dp),
+          verticalAlignment = Alignment.Top
+        ) {
+          Box(
+            modifier = Modifier
+              .padding(top = 11.dp, end = 10.dp)
+              .size(width = 4.dp, height = if (isActive) 18.dp else 6.dp)
+              .clip(RoundedCornerShape(2.dp))
+              .background(if (isActive) FloraGoldSoft else Color.Transparent)
+          )
+          Text(
+            text = line.text,
+            style = MaterialTheme.typography.titleLarge.copy(
+              fontSize = 20.sp,
+              lineHeight = 29.sp,
+              fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+            ),
+            color = if (isActive) FloraPlayerCream else FloraLyricIdle.copy(alpha = 0.84f)
+          )
+        }
       }
     }
   }
