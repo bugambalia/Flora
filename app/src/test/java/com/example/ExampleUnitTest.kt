@@ -226,4 +226,14 @@ class ExampleUnitTest {
     assertNotEquals(nameA, nameB)
     assertTrue(nameA.matches(Regex("cover_[0-9a-f]{32}\\.jpg")))
   }
+
+  @Test
+  fun releaseCatalogContainsCurrentVersionAndValidUrls() {
+    val entries = com.example.data.model.ReleaseCatalog.entries
+    assertTrue(entries.isNotEmpty())
+    assertTrue(entries.any { it.tag == "v1.0" && it.isLatest })
+    assertTrue(entries.all { it.groups.isNotEmpty() && it.summary.isNotBlank() })
+    assertTrue(com.example.data.model.ReleaseCatalog.GITHUB_PAGES_URL.startsWith("https://"))
+    assertTrue(com.example.data.model.ReleaseCatalog.GITHUB_RELEASES_URL.startsWith("https://"))
+  }
 }

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flora · Releases y Historial de Cambios</title>
+  <meta name="description" content="Portal oficial de versiones, descargas APK/AAB, verificación SHA-256 y Changelog de Flora — Reproductor Musical Botánico para Android." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600;1,700&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="parchment-glow" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="Flora inicio">
+        <div class="brand-emblem">
+          <img
+            id="brand-icon"
+            src="./assets/flora-icon.jpg"
+            alt="Icono de Flora"
+            onerror="this.onerror=null; this.src='../app/src/main/res/drawable/herbarium_app_icon_1794966575242.jpg';"
+          />
+        </div>
+        <div class="brand-text">
+          <span class="kicker">FLORA · HERBARIO MUSICAL</span>
+          <h1 class="brand-title">Releases &amp; Changelog</h1>
+        </div>
+      </a>
+
+      <div class="header-actions">
+        <span id="sync-badge" class="status-pill" title="Estado de sincronización con GitHub">
+          <span class="status-dot"></span>
+          <span id="sync-badge-text">Cargando catálogo...</span>
+        </span>
+        <button id="theme-toggle" class="icon-btn" type="button" aria-label="Cambiar entre tema claro y oscuro" title="Cambiar tema">
+          <span id="theme-icon" aria-hidden="true">☀</span>
+          <span class="btn-label" id="theme-label">Nocturno</span>
+        </button>
+        <a id="github-repo-link" class="outline-btn" href="https://github.com/bugambalia/Flora" target="_blank" rel="noopener noreferrer">
+          GitHub ↗
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top" class="container main-content">
+    <!-- Hero: Última versión publicada -->
+    <section class="plate hero-plate" aria-labelledby="hero-title">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <div class="eyebrow-row">
+            <span class="eyebrow">LÁMINA DE VERSIÓN ACTUAL</span>
+            <span id="hero-version-pill" class="mono-badge accent-terracotta">v1.0</span>
+          </div>
+          <h2 id="hero-title" class="hero-headline">Flora — Reproductor Musical Botánico</h2>
+          <p id="hero-summary" class="hero-description">
+            Reproductor de audio local y sin conexión para Android con estética de herbario ilustrado, motor Media3/ExoPlayer, ecualizador botánico de 5 bandas, visualizador FFT y paletas reactivas.
+          </p>
+
+          <div class="meta-chips" id="hero-meta-chips">
+            <span class="chip">Android 7.0+ (minSdk 24)</span>
+            <span class="chip">targetSdk 36</span>
+            <span class="chip">100 % Local y sin conexión</span>
+            <span class="chip mono" id="hero-package">com.aistudio.herbariumplayer.bvnqtx</span>
+          </div>
+
+          <div class="hero-cta-row" id="hero-cta-row">
+            <a id="hero-apk-btn" class="primary-btn" href="https://github.com/bugambalia/Flora/releases/latest" target="_blank" rel="noopener noreferrer">
+              Descargar APK
+            </a>
+            <a id="hero-releases-btn" class="secondary-btn" href="https://github.com/bugambalia/Flora/releases" target="_blank" rel="noopener noreferrer">
+              Ver en GitHub Releases
+            </a>
+            <a id="hero-changelog-btn" class="outline-btn" href="https://github.com/bugambalia/Flora/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">
+              CHANGELOG.md
+            </a>
+          </div>
+        </div>
+
+        <aside class="hero-spec-panel">
+          <div class="spec-header">
+            <span class="eyebrow">VERIFICACIÓN E INSTALACIÓN</span>
+            <span id="hero-date" class="mono small-muted">2026-11-25</span>
+          </div>
+          <div id="hero-assets-list" class="assets-mini-list"></div>
+          <div class="sha-box">
+            <div class="sha-box-head">
+              <span class="mono">Verificación SHA-256</span>
+              <button class="copy-mini-btn" type="button" data-copy-target="sha-command">Copiar</button>
+            </div>
+            <pre><code id="sha-command">sha256sum -c Flora-v1.0.apk.sha256</code></pre>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Barra de configuración de repositorio / filtros -->
+    <section class="controls-bar" aria-label="Filtros del historial de cambios">
+      <div class="search-wrap">
+        <label class="sr-only" for="search-input">Buscar versión o cambio</label>
+        <input id="search-input" type="search" placeholder="Buscar por versión (ej. v1.0), función, Media3, ecualizador..." autocomplete="off" />
+      </div>
+
+      <div class="filter-chips" role="tablist" aria-label="Filtrar por tipo de cambio">
+        <button class="filter-chip active" type="button" data-category="all">Todas</button>
+        <button class="filter-chip" type="button" data-category="added">Novedades</button>
+        <button class="filter-chip" type="button" data-category="improved">Mejoras</button>
+        <button class="filter-chip" type="button" data-category="fixed">Correcciones</button>
+        <button class="filter-chip" type="button" data-category="technical">Técnico</button>
+      </div>
+
+      <form id="repo-form" class="repo-switcher" title="Cambiar repositorio de GitHub consultado">
+        <label class="sr-only" for="repo-input">Repositorio GitHub (usuario/repo)</label>
+        <input id="repo-input" type="text" value="bugambalia/Flora" aria-label="Repositorio de GitHub" />
+        <button class="outline-btn small-btn" type="submit">Sincronizar</button>
+      </form>
+    </section>
+
+    <!-- Estado próximo / Unreleased -->
+    <section id="upcoming-section" class="upcoming-strip" hidden></section>
+
+    <!-- Historial completo de Releases y Changelog -->
+    <section aria-labelledby="timeline-heading">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">ARCHIVO CRONOLÓGICO</span>
+          <h2 id="timeline-heading" class="section-title">Historial de versiones y cambios</h2>
+        </div>
+        <span id="release-count" class="mono small-muted">0 versiones</span>
+      </div>
+
+      <div id="releases-timeline" class="timeline-list"></div>
+      <div id="empty-state" class="plate empty-plate" hidden>
+        <p class="empty-title">No se encontraron coincidencias en el herbario.</p>
+        <p class="empty-sub">Prueba con otro término de búsqueda o selecciona «Todas» las categorías.</p>
+      </div>
+    </section>
+
+    <!-- Guía de publicación en GitHub -->
+    <section class="plate publish-guide" aria-labelledby="guide-heading">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">FLUJO AUTOMATIZADO EN GITHUB</span>
+          <h2 id="guide-heading" class="section-title">Cómo subir cambios y publicar una nueva versión</h2>
+        </div>
+        <span class="mono small-muted">.github/workflows/</span>
+      </div>
+
+      <div class="guide-steps">
+        <article class="guide-step">
+          <div class="step-num">01</div>
+          <h3>Subir código y actualizar Changelog</h3>
+          <p>Registra tus cambios en <code>CHANGELOG.md</code> (y en <code>app/build.gradle.kts</code> si incrementas <code>versionCode</code> / <code>versionName</code>) y súbelos a GitHub:</p>
+          <div class="code-snippet">
+            <pre><code id="cmd-push">git add .
+git commit -m "docs: actualizar changelog y página de releases"
+git push origin main</code></pre>
+            <button class="copy-mini-btn" type="button" data-copy-target="cmd-push">Copiar</button>
+          </div>
+        </article>
+
+        <article class="guide-step">
+          <div class="step-num">02</div>
+          <h3>Publicar tag para compilar APK, AAB y Release</h3>
+          <p>Al subir una etiqueta <code>v*</code>, GitHub Actions ejecuta pruebas, firma el APK/AAB, extrae tus notas de <code>CHANGELOG.md</code> y crea la Release automáticamente:</p>
+          <div class="code-snippet">
+            <pre><code id="cmd-tag">git tag -a v1.1 -m "Flora v1.1"
+git push origin v1.1</code></pre>
+            <button class="copy-mini-btn" type="button" data-copy-target="cmd-tag">Copiar</button>
+          </div>
+        </article>
+
+        <article class="guide-step">
+          <div class="step-num">03</div>
+          <h3>Activar esta página en GitHub Pages</h3>
+          <p>En tu repositorio ve a <strong>Settings → Pages</strong> y en <strong>Build and deployment → Source</strong> elige <strong>GitHub Actions</strong>. Cada push a <code>main</code> o nueva Release actualizará esta web automáticamente.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Galería de capturas -->
+    <section aria-labelledby="gallery-heading" class="gallery-section">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">LÁMINAS DE LA INTERFAZ</span>
+          <h2 id="gallery-heading" class="section-title">Capturas de Flora</h2>
+        </div>
+      </div>
+      <div id="screenshots-grid" class="screenshots-grid"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span>Flora — Herbario Musical · 100 % local y código abierto</span>
+      <div class="footer-links">
+        <a href="./CHANGELOG.md" target="_blank" rel="noopener noreferrer">CHANGELOG.md</a>
+        <a href="./releases.json" target="_blank" rel="noopener noreferrer">releases.json</a>
+        <a id="footer-releases-link" href="https://github.com/bugambalia/Flora/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Lightbox para capturas -->
+  <div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Vista ampliada de captura">
+    <button id="lightbox-close" class="lightbox-close" type="button" aria-label="Cerrar vista ampliada">✕</button>
+    <figure class="lightbox-figure">
+      <img id="lightbox-img" src="" alt="" />
+      <figcaption id="lightbox-caption"></figcaption>
+    </figure>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

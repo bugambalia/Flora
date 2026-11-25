@@ -2,7 +2,7 @@
 
 **Flora** es un reproductor de música local y sin conexión para Android con estética de herbario ilustrado, diseñado para escuchar tu fonoteca con reproducción continua, ecualizador orgánico, paletas reactivas y colección botánica desbloqueable.
 
-- **Versión:** `1.0` (`versionCode 1`)
+- **Versión / Release actual:** `v1.0` (`versionName "1.0"`, `versionCode 1`)
 - **Identificador:** `com.aistudio.herbariumplayer.bvnqtx`
 - **Compatibilidad:** Android 7.0+ (`minSdk 24`, `targetSdk 36`, `compileSdk 36.1`)
 - **Modo de operación:** 100 % local y sin conexión (sin cuentas ni servicios en la nube)
@@ -72,8 +72,24 @@
 
 ## Descarga y compilación
 
-### Instalación
-Puedes descargar el APK oficial firmado y verificar su suma SHA-256 desde la sección **Releases** del repositorio.
+### Instalación (Release `v1.0`) y Página de Releases
+- **Portal web de Releases y Changelog (GitHub Pages):** [Ver página oficial de versiones y cambios](https://bugambalia.github.io/Flora/)
+- **Historial de cambios completo:** [`CHANGELOG.md`](CHANGELOG.md)
+- **Descarga recomendada (GitHub Releases):** [Ver releases de Flora](https://github.com/bugambalia/Flora/releases) (cuando publiques el tag `v1.0`, el enlace directo será [`Flora v1.0`](https://github.com/bugambalia/Flora/releases/tag/v1.0)).
+- **Compilación firmada actual (artifact ZIP, requiere sesión en GitHub):** [Descargar `flora-release-v1.0`](https://github.com/bugambalia/Flora/actions/runs/45694469991/artifacts/15060726623)
+
+1. Descomprime el paquete si descargaste el artifact ZIP o descarga directamente **`Flora-v1.0.apk`** desde **Releases** (junto con **`Flora-v1.0.apk.sha256`** y **`Flora-v1.0.aab`**).
+2. Instala `Flora-v1.0.apk` en tu dispositivo Android (Android 7.0 o superior).
+
+```bash
+# Verificación opcional de integridad del APK de la release v1.0
+sha256sum -c Flora-v1.0.apk.sha256
+```
+
+### Publicar una nueva versión y actualizar la web
+1. Documenta los cambios en [`CHANGELOG.md`](CHANGELOG.md) y actualiza `docs/releases.json` si deseas añadir notas previas.
+2. Sube los cambios a `main` (`git push origin main`): el workflow `.github/workflows/pages.yml` desplegará automáticamente la página en GitHub Pages (activa **Settings → Pages → Source: GitHub Actions** la primera vez).
+3. Crea y sube una etiqueta `v*` (por ejemplo `git tag -a v1.1 -m "Flora v1.1" && git push origin v1.1`) para que `.github/workflows/release.yml` compile el APK/AAB firmado, genere el SHA-256 y publique la GitHub Release con sus notas.
 
 ### Compilación y pruebas locales
 ```bash

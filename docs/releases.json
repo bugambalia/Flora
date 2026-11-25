@@ -1,0 +1,120 @@
+{
+  "appName": "Flora — Reproductor Musical Botánico",
+  "repoOwner": "bugambalia",
+  "repoName": "Flora",
+  "packageId": "com.aistudio.herbariumplayer.bvnqtx",
+  "minSdk": 24,
+  "targetSdk": 36,
+  "compileSdk": "36.1",
+  "pagesUrl": "https://bugambalia.github.io/Flora/",
+  "releases": [
+    {
+      "tag": "v1.0",
+      "versionName": "1.0",
+      "versionCode": 1,
+      "title": "Flora v1.0 — Edición Herbario Inicial",
+      "date": "2026-11-25",
+      "isLatest": true,
+      "prerelease": false,
+      "summary": "Primera versión pública oficial de Flora: reproductor musical local y sin conexión con estética de herbario ilustrado, motor Media3/ExoPlayer, ecualizador botánico de 5 bandas, visualizador FFT y paletas dinámicas.",
+      "assets": [
+        {
+          "name": "Flora-v1.0.apk",
+          "kind": "apk",
+          "label": "Descargar APK firmado"
+        },
+        {
+          "name": "Flora-v1.0.aab",
+          "kind": "aab",
+          "label": "App Bundle (AAB)"
+        },
+        {
+          "name": "Flora-v1.0.apk.sha256",
+          "kind": "sha256",
+          "label": "Suma SHA-256"
+        }
+      ],
+      "sections": [
+        {
+          "category": "added",
+          "label": "Novedades",
+          "items": [
+            "Motor Media3 / ExoPlayer con servicio en primer plano (mediaPlayback), cola reordenable, control de velocidad y temporizador de reposo.",
+            "Reproducción Gapless sin cortes y Crossfade progresivo entre pistas.",
+            "Visualizador botánico en tiempo real mediante análisis FFT optimizado (graves, medios y agudos).",
+            "Ecualizador visual de 5 bandas representado como tallos botánicos animados, con perfiles preestablecidos, Bass Boost y Virtualizer.",
+            "Colores dinámicos (Modo Camaleón) extraídos de cada carátula con AndroidX Palette y temas Claro, Oscuro y Sistema.",
+            "Soporte completo para letras sincronizadas (.lrc) con edición e importación directa.",
+            "Detección automática de fonoteca mediante SAF y almacenamiento local con umbral de duración configurable.",
+            "Catálogo Canciones con buscador instantáneo, filtros por fuente/género e índice vertical táctil A–Z.",
+            "Gestión de Playlists con importación/exportación M3U y JSON y Herbario botánico desbloqueable."
+          ]
+        },
+        {
+          "category": "technical",
+          "label": "Notas técnicas y compilación",
+          "items": [
+            "Minificación R8 y reducción de recursos (isMinifyEnabled = true, isShrinkResources = true) para APK/AAB optimizados.",
+            "Caché LRU de carátulas en RGB_565 con reescalado automático y hash SHA-256 libre de colisiones.",
+            "Operación 100 % local y sin conexión; respaldo selectivo de Room y DataStore.",
+            "Pipeline automatizado en GitHub Actions para pruebas unitarias, compilación firmada y publicación de Releases."
+          ]
+        }
+      ]
+    }
+  ],
+  "upcoming": {
+    "tag": "v1.1",
+    "title": "En preparación — Portal de Releases & Changelog",
+    "summary": "Mejoras en progreso listas para subir al repositorio y publicar mediante etiqueta v1.1.",
+    "sections": [
+      {
+        "category": "added",
+        "label": "Novedades",
+        "items": [
+          "Página web oficial en GitHub Pages para explorar Releases, descargas APK/AAB, checksums SHA-256 e historial de cambios.",
+          "Pantalla de Versiones y Changelog integrada dentro de Ajustes de la aplicación Android."
+        ]
+      },
+      {
+        "category": "improved",
+        "label": "Mejoras",
+        "items": [
+          "Workflow de GitHub Release sincronizado automáticamente con CHANGELOG.md al publicar etiquetas v*."
+        ]
+      }
+    ]
+  },
+  "screenshots": [
+    {
+      "file": "screenshot_1_c58c7ab5.png",
+      "fallback": "../public/assets/aistudio/screenshot_1_c58c7ab5.png",
+      "caption": "Floración (Inicio)"
+    },
+    {
+      "file": "screenshot_2_ffc40865.png",
+      "fallback": "../public/assets/aistudio/screenshot_2_ffc40865.png",
+      "caption": "Canciones e índice A–Z"
+    },
+    {
+      "file": "screenshot_3_f209375b.png",
+      "fallback": "../public/assets/aistudio/screenshot_3_f209375b.png",
+      "caption": "Playlists botánicas"
+    },
+    {
+      "file": "screenshot_4_5d8ab5d1.png",
+      "fallback": "../public/assets/aistudio/screenshot_4_5d8ab5d1.png",
+      "caption": "Detalle de Playlist"
+    },
+    {
+      "file": "screenshot_5_5ccba310.png",
+      "fallback": "../public/assets/aistudio/screenshot_5_5ccba310.png",
+      "caption": "Mini-reproductor y desbloqueo"
+    },
+    {
+      "file": "screenshot_6_151e2da8.png",
+      "fallback": "../public/assets/aistudio/screenshot_6_151e2da8.png",
+      "caption": "Ecualizador visual de tallos"
+    }
+  ]
+}

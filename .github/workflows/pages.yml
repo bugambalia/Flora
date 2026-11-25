@@ -1,0 +1,54 @@
+name: Deploy Releases & Changelog Page
+
+on:
+  push:
+    branches: [ main, master ]
+  release:
+    types: [ published, edited ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-pages:
+    name: Build GitHub Pages Site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Assemble static site with assets
+        run: |
+          rm -rf _site
+          mkdir -p _site/assets
+          cp -r docs/* _site/
+          cp CHANGELOG.md _site/CHANGELOG.md
+          cp public/assets/aistudio/screenshot_*.png _site/assets/ || true
+          cp app/src/main/res/drawable/herbarium_app_icon_1794966575242.jpg _site/assets/flora-icon.jpg || true
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: build-pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

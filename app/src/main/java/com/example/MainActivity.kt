@@ -109,6 +109,7 @@ import com.example.ui.screens.HerbariumScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.NowPlayingScreen
 import com.example.ui.screens.PlaylistsScreen
+import com.example.ui.screens.ReleasesOverlayScreen
 import com.example.ui.screens.SettingsOverlayScreen
 import com.example.ui.theme.FloraStripShape
 import com.example.ui.theme.HerbariumTheme
@@ -163,6 +164,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
   var showEqualizerOverlay by rememberSaveable { mutableStateOf(false) }
   var showHerbariumOverlay by rememberSaveable { mutableStateOf(false) }
   var showSettingsOverlay by rememberSaveable { mutableStateOf(false) }
+  var showReleasesOverlay by rememberSaveable { mutableStateOf(false) }
   var showQueueSheet by rememberSaveable { mutableStateOf(false) }
   var selectedPlaylistId by rememberSaveable { mutableStateOf<Long?>(null) }
   var inspectedSpeciesId by remember { mutableStateOf<BotanicalSpeciesId?>(null) }
@@ -346,6 +348,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
     val navigateToTab: (Any) -> Unit = { route ->
       showHerbariumOverlay = false
       showSettingsOverlay = false
+      showReleasesOverlay = false
       navController.navigate(route) {
         popUpTo<FloracionRoute> { saveState = true }
         launchSingleTop = true
@@ -358,18 +361,33 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
       showNowPlaying = false
       showEqualizerOverlay = false
       showSettingsOverlay = false
+      showReleasesOverlay = false
       showHerbariumOverlay = true
     }
 
     val openHerbariumAtlas: () -> Unit = {
       inspectedSpeciesId = null
       showSettingsOverlay = false
+      showReleasesOverlay = false
       showHerbariumOverlay = true
     }
 
     val openSettings: () -> Unit = {
       viewModel.refreshCoverCacheSize()
+      showReleasesOverlay = false
       showSettingsOverlay = true
+    }
+
+    val openExternalUrl: (String) -> Unit = { url ->
+      val opened = runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        true
+      }.getOrDefault(false)
+      if (!opened) {
+        coroutineScope.launch {
+          snackbarHostState.showSnackbar("No se pudo abrir el navegador para $url")
+        }
+      }
     }
 
     val openEditTrackMetadata: (AudioTrack) -> Unit = { track ->
@@ -396,7 +414,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
-              if (!isExpanded && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay && !showSettingsOverlay) {
+              if (!isExpanded && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay && !showSettingsOverlay && !showReleasesOverlay) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                   AnimatedVisibility(
                     visible = uiState.playbackState.currentTrack != null,
@@ -660,7 +678,7 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
                   }
                 }
 
-                if (isExpanded && uiState.playbackState.currentTrack != null && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay && !showSettingsOverlay) {
+                if (isExpanded && uiState.playbackState.currentTrack != null && !showNowPlaying && !showEqualizerOverlay && !showHerbariumOverlay && !showSettingsOverlay && !showReleasesOverlay) {
                   MiniPlayerBar(
                     playbackState = uiState.playbackState,
                     positionMsFlow = viewModel.playbackPositionMs,
@@ -727,7 +745,21 @@ private fun HerbariumRootApp(viewModel: HerbariumViewModel) {
           onThemeModeChange = viewModel::setThemeMode,
           onChameleonToggle = viewModel::toggleChameleonTheme,
           onClearCoverCache = viewModel::clearCoverCache,
+          onOpenReleases = { showReleasesOverlay = true },
+          onOpenExternalUrl = openExternalUrl,
           onDismiss = { showSettingsOverlay = false }
+        )
+      }
+
+      AnimatedVisibility(
+        visible = showReleasesOverlay,
+        enter = slideInVertically { it } + fadeIn(),
+        exit = slideOutVertically { it } + fadeOut()
+      ) {
+        ReleasesOverlayScreen(
+          chameleonEnabled = uiState.effectsState.chameleonThemeEnabled,
+          onOpenExternalUrl = openExternalUrl,
+          onDismiss = { showReleasesOverlay = false }
         )
       }
 

@@ -21,6 +21,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -43,7 +45,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.data.model.AppThemeMode
+import com.example.data.model.ReleaseCatalog
 import com.example.ui.components.DottedRuleDivider
 import com.example.ui.components.FloraMountedPlate
 import com.example.ui.components.ParchmentBackground
@@ -66,6 +70,8 @@ fun SettingsOverlayScreen(
   onThemeModeChange: (AppThemeMode) -> Unit,
   onChameleonToggle: (Boolean) -> Unit,
   onClearCoverCache: () -> Unit,
+  onOpenReleases: () -> Unit = {},
+  onOpenExternalUrl: (String) -> Unit = {},
   onDismiss: () -> Unit,
 ) {
   BackHandler(onBack = onDismiss)
@@ -365,6 +371,72 @@ fun SettingsOverlayScreen(
               .testTag("settings_clear_cache_button")
           ) {
             Text("Limpiar caché de carátulas", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+          }
+        }
+      }
+
+      // 5. Releases & Changelog Card
+      FloraMountedPlate(
+        shape = FloraStripShape,
+        containerColor = colors.paperCard,
+        borderColor = colors.borderInk.copy(alpha = 0.45f),
+        shadowOffsetX = 0.dp,
+        shadowOffsetY = 0.dp,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column(
+          modifier = Modifier.padding(14.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Icon(Icons.Filled.NewReleases, contentDescription = null, tint = colors.terracotta, modifier = Modifier.size(20.dp))
+              Text("Versiones y Releases", style = MaterialTheme.typography.titleMedium, color = colors.ink)
+            }
+            Text(
+              text = "v${BuildConfig.VERSION_NAME}",
+              style = MaterialTheme.typography.labelLarge,
+              color = colors.forest
+            )
+          }
+          Text(
+            text = "Consulta el historial de cambios, descargas APK/AAB y la página web en GitHub.",
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.metaGreen
+          )
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            Button(
+              onClick = onOpenReleases,
+              shape = FloraStripShape,
+              colors = ButtonDefaults.buttonColors(containerColor = colors.forest, contentColor = FloraPlayerCream),
+              modifier = Modifier
+                .weight(1f)
+                .testTag("settings_open_releases_button")
+            ) {
+              Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Changelog", style = MaterialTheme.typography.labelLarge)
+            }
+            OutlinedButton(
+              onClick = { onOpenExternalUrl(ReleaseCatalog.GITHUB_PAGES_URL) },
+              shape = FloraStripShape,
+              border = BorderStroke(1.dp, colors.borderInk),
+              modifier = Modifier
+                .weight(1f)
+                .testTag("settings_open_github_pages_button")
+            ) {
+              Text("Web GitHub", style = MaterialTheme.typography.labelLarge, color = colors.ink)
+            }
           }
         }
       }

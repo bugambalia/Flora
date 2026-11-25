@@ -16,4 +16,9 @@
     <string name="scan_service_notification_text">Buscando audios mayores a 90 s para Botanical Library</string>
     <string name="nav_settings">Ajustes</string>
     <string name="settings_title">Ajustes</string>
+    <string name="releases_title">Versiones y Releases</string>
+    <string name="releases_open_button">Ver historial de versiones</string>
+    <string name="releases_open_github">GitHub Releases</string>
+    <string name="releases_open_pages">Portal web (Pages)</string>
+    <string name="releases_open_changelog">CHANGELOG.md</string>
 </resources>
