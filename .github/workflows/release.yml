@@ -63,10 +63,23 @@ jobs:
             yes | "$SDK_MANAGER" --licenses >/dev/null 2>&1 || true
           fi
 
-      - name: Restore debug keystore
+      - name: Ensure debug keystore
         run: |
-          if [ ! -f debug.keystore ] && [ -f debug.keystore.base64 ]; then
-            tr -d '[:space:]' < debug.keystore.base64 | base64 --decode > debug.keystore
+          if [ ! -s debug.keystore ]; then
+            if [ -s debug.keystore.base64 ]; then
+              tr -d '[:space:]' < debug.keystore.base64 | base64 --decode > debug.keystore || rm -f debug.keystore
+            fi
+            if [ ! -s debug.keystore ]; then
+              keytool -genkeypair -noprompt \
+                -keystore debug.keystore \
+                -storepass android \
+                -alias androiddebugkey \
+                -keypass android \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+            fi
           fi
 
       - name: Run unit tests
