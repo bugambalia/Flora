@@ -86,11 +86,6 @@
 sha256sum -c Flora-v1.0.apk.sha256
 ```
 
-### Publicar una nueva versión y actualizar la web
-1. Documenta los cambios en [`CHANGELOG.md`](CHANGELOG.md) y actualiza `docs/releases.json` si deseas añadir notas previas.
-2. Sube los cambios a `main` (`git push origin main`): el workflow `.github/workflows/pages.yml` desplegará automáticamente la página en GitHub Pages (activa **Settings → Pages → Source: GitHub Actions** la primera vez).
-3. Crea y sube una etiqueta `v*` (por ejemplo `git tag -a v1.1 -m "Flora v1.1" && git push origin v1.1`) para que `.github/workflows/release.yml` compile el APK/AAB firmado, genere el SHA-256 y publique la GitHub Release con sus notas.
-
 ### Compilación y pruebas locales
 ```bash
 # Compilar APK de depuración
